@@ -1,0 +1,13 @@
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.csproj.AssemblyReference.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.AssemblyInfoInputs.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.AssemblyInfo.cs
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.csproj.CoreCompileInputs.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.sourcelink.json
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\bin\Debug\net10.0\WebNet.CatalogServer.deps.json
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\bin\Debug\net10.0\WebNet.CatalogServer.dll
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\bin\Debug\net10.0\WebNet.CatalogServer.pdb
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.dll
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\refint\WebNet.CatalogServer.dll
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.pdb
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\ref\WebNet.CatalogServer.dll

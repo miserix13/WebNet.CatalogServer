@@ -1,8 +1,159 @@
 ﻿
+using MessagePack;
 
 namespace WebNet.CatalogServer
 {
     public class Server
     {
+        private readonly Storage storage;
+        private readonly ITokenAuthorizer tokenAuthorizer;
+        private readonly IClientCertificateValidator clientCertificateValidator;
+        private readonly TimeProvider timeProvider;
+
+        private DateTimeOffset startedAtUtc;
+
+        public Server(
+            Storage storage,
+            ITokenAuthorizer tokenAuthorizer,
+            IClientCertificateValidator clientCertificateValidator,
+            TimeProvider? timeProvider = null)
+        {
+            this.storage = storage;
+            this.tokenAuthorizer = tokenAuthorizer;
+            this.clientCertificateValidator = clientCertificateValidator;
+            this.timeProvider = timeProvider ?? TimeProvider.System;
+            this.startedAtUtc = DateTimeOffset.MinValue;
+        }
+
+        public bool IsRunning { get; private set; }
+
+        public void Start()
+        {
+            this.startedAtUtc = this.timeProvider.GetUtcNow();
+            this.IsRunning = true;
+        }
+
+        public void Stop()
+        {
+            this.IsRunning = false;
+        }
+
+        public async Task<ResponseEnvelope> HandleAsync(
+            RequestEnvelope request,
+            SecurityContext securityContext,
+            CancellationToken cancellationToken = default)
+        {
+            if (!this.IsRunning)
+            {
+                return ResponseEnvelope.Error(request.RequestId, "server.not_running", "Server is not running.");
+            }
+
+            if (!this.clientCertificateValidator.Validate(securityContext.ClientCertificateThumbprint))
+            {
+                return ResponseEnvelope.Error(request.RequestId, "auth.invalid_certificate", "Invalid client certificate.");
+            }
+
+            if (!this.tokenAuthorizer.Authorize(securityContext.Token, request.Command))
+            {
+                return ResponseEnvelope.Error(request.RequestId, "auth.forbidden", "Token does not have required scope.");
+            }
+
+            return request.Command switch
+            {
+                CommandKind.CreateDatabase => await this.HandleCreateDatabaseAsync(request, cancellationToken),
+                CommandKind.DropDatabase => await this.HandleDropDatabaseAsync(request, cancellationToken),
+                CommandKind.ListDatabases => await this.HandleListDatabasesAsync(request, cancellationToken),
+                CommandKind.CreateCatalog => await this.HandleCreateCatalogAsync(request, cancellationToken),
+                CommandKind.DropCatalog => await this.HandleDropCatalogAsync(request, cancellationToken),
+                CommandKind.ListCatalogs => await this.HandleListCatalogsAsync(request, cancellationToken),
+                CommandKind.Health => await this.HandleHealthAsync(request, cancellationToken),
+                CommandKind.Metrics => await this.HandleMetricsAsync(request, cancellationToken),
+                _ => ResponseEnvelope.Error(request.RequestId, "command.unsupported", $"Unsupported command '{request.Command}'.")
+            };
+        }
+
+        private async Task<ResponseEnvelope> HandleCreateDatabaseAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<CreateDatabaseRequest>(request.Payload);
+            var result = await this.storage.CreateDatabaseAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleDropDatabaseAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<DropDatabaseRequest>(request.Payload);
+            var result = await this.storage.DropDatabaseAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleListDatabasesAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            _ = MessagePackSerializer.Deserialize<ListDatabasesRequest>(request.Payload);
+            var result = await this.storage.ListDatabasesAsync(cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleCreateCatalogAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<CreateCatalogRequest>(request.Payload);
+            var result = await this.storage.CreateCatalogAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleDropCatalogAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<DropCatalogRequest>(request.Payload);
+            var result = await this.storage.DropCatalogAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleListCatalogsAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<ListCatalogsRequest>(request.Payload);
+            var result = await this.storage.ListCatalogsAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private Task<ResponseEnvelope> HandleHealthAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            _ = MessagePackSerializer.Deserialize<HealthRequest>(request.Payload);
+            var stats = this.storage.GetStatistics();
+            var response = new HealthResponse(
+                ServerHealthStatus.Healthy,
+                this.startedAtUtc,
+                this.timeProvider.GetUtcNow() - this.startedAtUtc,
+                stats.DatabaseCount,
+                stats.CatalogCount);
+
+            return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
+        }
+
+        private Task<ResponseEnvelope> HandleMetricsAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            _ = MessagePackSerializer.Deserialize<MetricsRequest>(request.Payload);
+            var stats = this.storage.GetStatistics();
+            var response = new MetricsResponse(
+                new Dictionary<string, double>
+                {
+                    ["database.count"] = stats.DatabaseCount,
+                    ["catalog.count"] = stats.CatalogCount,
+                    ["catalog.items.total"] = stats.CatalogItemCount,
+                    ["documents.total"] = stats.DocumentCount
+                });
+
+            return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
+        }
     }
 }
