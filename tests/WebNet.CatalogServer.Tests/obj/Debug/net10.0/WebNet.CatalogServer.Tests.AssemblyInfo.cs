@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("WebNet.CatalogServer.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bf8ad12308ba92417177e36232ed625f6f511ae8")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+90020e905e6eb291d956c1ca58b55537bfc3469b")]
 [assembly: System.Reflection.AssemblyProductAttribute("WebNet.CatalogServer.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WebNet.CatalogServer.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
