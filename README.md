@@ -34,6 +34,18 @@
 - On startup, state recovery loads from engine-backed persisted bytes (with snapshot fallback).
 - Every successful state mutation (create/drop db, create/drop catalog, put/delete document) is atomically persisted across engines.
 
+## Security
+
+- Runtime auth now uses LiteGraph SQLite-backed credentials (no allow-all runtime path).
+- Default auth DB path: `./data/auth/litegraph-auth.db` (override with `WEBNET_AUTH_DB_PATH`).
+- Default bootstrap credential is created if missing:
+  - token: `dev-token` (override `WEBNET_AUTH_BOOTSTRAP_BEARER_TOKEN`)
+  - role/name: `admin` (override `WEBNET_AUTH_BOOTSTRAP_CREDENTIAL_NAME`)
+  - bootstrap enabled by default (`WEBNET_AUTH_BOOTSTRAP_ENABLED=true|false`)
+- Client certificate thumbprints are validated against allowlist:
+  - env: `WEBNET_ALLOWED_CERT_THUMBPRINTS` (comma/semicolon separated)
+  - default includes `dev-thumbprint` for local smoke tests
+
 ## Run
 
 - Start server (default port 7070):

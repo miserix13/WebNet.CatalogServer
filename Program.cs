@@ -35,16 +35,21 @@ internal static class Program
         var layout = StorageDirectoryLayout.Resolve(dataRoot);
         var fileSystemCheck = StorageFilesystemValidator.EnsureAndValidate(layout);
         var storage = new Storage(new MultiEngineStoragePersistenceAdapter(layout));
+        var authOptions = LiteGraphAuthOptions.Resolve(layout.DataRoot);
+
+        using var tokenAuthorizer = new LiteGraphTokenAuthorizer(authOptions);
+        var certificateValidator = new ThumbprintAllowListClientCertificateValidator(authOptions.AllowedCertificateThumbprints);
         var server = new Server(
             storage,
-            new AllowAllTokenAuthorizer(),
-            new AllowAllClientCertificateValidator());
+            tokenAuthorizer,
+            certificateValidator);
 
         var storageCheck = storage.RunSelfCheck();
         var combinedIssues = fileSystemCheck.Issues.Concat(storageCheck.Issues).ToArray();
         var isHealthy = combinedIssues.Length == 0;
 
         Console.WriteLine($"Storage roots => data='{layout.DataRoot}', zonetree='{layout.ZoneTreeRoot}', fastdb='{layout.FastDbRoot}', rocksdb='{layout.RocksDbRoot}', snapshot='{layout.SnapshotFilePath}'");
+        Console.WriteLine($"Auth => litegraph='{authOptions.DatabaseFilePath}', bootstrap={authOptions.BootstrapCredentialEnabled}, cert-allowlist={authOptions.AllowedCertificateThumbprints.Count}");
         Console.WriteLine($"Startup SelfCheck => healthy={isHealthy}, issues={combinedIssues.Length}");
         foreach (var issue in combinedIssues)
         {
