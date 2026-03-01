@@ -1,6 +1,6 @@
-# WebNet.CatalogServer
+# WebNet.CatalogServer #
 
-## A document / catalog (as in a collection of related items) database server built on .NET 10 and written in C#
+## A document / catalog (as in a collection of related items) database server built on .NET 10 and written in C# ##
 
 ## For storage, uses <https://github.com/koculu/ZoneTree>, <https://github.com/stonstad/Stellar.FastDB> and <https://github.com/curiosity-ai/rocksdb-sharp> key-value stores for both documents and catalogs
 
@@ -22,10 +22,10 @@
 - Default storage root: `./data` (relative to the process working directory).
 - Configurable storage root: `--data-root <path>` or environment variable `WEBNET_DATA_ROOT`.
 - Filesystem layout is validated at startup and these directories are created if missing:
-	- `kv/zonetree`
-	- `kv/fastdb`
-	- `kv/rocksdb`
-	- `snapshots/storage.snapshot.mpk`
+  - `kv/zonetree`
+  - `kv/fastdb`
+  - `kv/rocksdb`
+  - `snapshots/storage.snapshot.mpk`
 - The server loads this snapshot on startup for automatic state recovery.
 - Every successful state mutation (create/drop db, create/drop catalog, put/delete document) is atomically persisted.
 
