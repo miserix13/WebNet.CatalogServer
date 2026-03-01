@@ -29,10 +29,10 @@ internal static class Program
             return;
         }
 
-        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly, options.DataRoot, options.AuthProviderOverride);
+        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly, options.DataRoot, options.AuthProviderOverride, options.EnableCluster, options.ClusterPort);
     }
 
-    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride)
+    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride, bool enableCluster, int clusterPort)
     {
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -110,8 +110,20 @@ internal static class Program
         }
 
         ConsoleCancelEventHandler? onCancel = null;
+        AkkaClusterRuntime? clusterRuntime = null;
         try
         {
+            if (enableCluster)
+            {
+                clusterRuntime = new AkkaClusterRuntime(AkkaClusterOptions.CreateDefault(clusterPort));
+                await clusterRuntime.StartAsync();
+                logger.LogInformation("Akka cluster runtime started: enabled={ClusterEnabled}, system={SystemName}, host={Host}, port={Port}",
+                    true,
+                    "webnet-catalog",
+                    "127.0.0.1",
+                    clusterPort);
+            }
+
             server.Start();
             await using var host = server.CreateTcpHost(TcpServerOptions.Default with { Port = port });
             await host.StartAsync();
@@ -170,6 +182,12 @@ internal static class Program
             if (tokenAuthorizer is IDisposable disposableAuthorizer)
             {
                 disposableAuthorizer.Dispose();
+            }
+
+            if (clusterRuntime is not null)
+            {
+                await clusterRuntime.DisposeAsync();
+                logger.LogInformation("Akka cluster runtime stopped.");
             }
         }
     }
@@ -387,6 +405,8 @@ internal static class Program
 
         var failOnSelfCheck = false;
         var selfCheckOnly = false;
+        var enableCluster = false;
+        var clusterPort = 8110;
         string? dataRoot = null;
         AuthProvider? authProviderOverride = null;
         var positional = new List<string>();
@@ -419,6 +439,38 @@ internal static class Program
                     }
 
                     selfCheckOnly = true;
+                    continue;
+                }
+
+                if (string.Equals(token, "--enable-cluster", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mode != "server")
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        error = "--enable-cluster is only valid in server mode.";
+                        return false;
+                    }
+
+                    enableCluster = true;
+                    continue;
+                }
+
+                if (token.StartsWith("--cluster-port", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mode != "server")
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        error = "--cluster-port is only valid in server mode.";
+                        return false;
+                    }
+
+                    if (!TryReadClusterPortValue(args, ref i, token, out var clusterPortValue, out error))
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        return false;
+                    }
+
+                    clusterPort = clusterPortValue;
                     continue;
                 }
 
@@ -492,7 +544,7 @@ internal static class Program
                 return false;
             }
 
-            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly, dataRoot, authProviderOverride);
+            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly, dataRoot, authProviderOverride, enableCluster, clusterPort);
             error = string.Empty;
             return true;
         }
@@ -598,6 +650,36 @@ internal static class Program
         return true;
     }
 
+    private static bool TryReadClusterPortValue(string[] args, ref int index, string token, out int clusterPort, out string error)
+    {
+        const string prefix = "--cluster-port=";
+        string rawValue;
+        if (token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            rawValue = token[prefix.Length..].Trim();
+        }
+        else
+        {
+            if (index + 1 >= args.Length)
+            {
+                clusterPort = 0;
+                error = "--cluster-port requires a value.";
+                return false;
+            }
+
+            rawValue = args[++index].Trim();
+        }
+
+        if (!TryParsePort(rawValue, out clusterPort))
+        {
+            error = $"Invalid cluster port '{rawValue}'. Expected integer in range 1-65535.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
     private static bool TryParseAuthProvider(string value, out AuthProvider provider)
     {
         if (string.Equals(value, "litegraph", StringComparison.OrdinalIgnoreCase))
@@ -621,7 +703,7 @@ internal static class Program
         Console.WriteLine("WebNet.CatalogServer");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only] [--data-root <path>] [--auth-provider <litegraph|windows>]");
+        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only] [--data-root <path>] [--auth-provider <litegraph|windows>] [--enable-cluster] [--cluster-port <port>]");
         Console.WriteLine("  dotnet run -- client [host] [port]");
         Console.WriteLine("  dotnet run -- --help");
         Console.WriteLine();
@@ -634,6 +716,8 @@ internal static class Program
         Console.WriteLine("  --self-check-only     Run self-check and exit without starting listener.");
         Console.WriteLine("  --data-root <path>    Override storage root (also via WEBNET_DATA_ROOT).\n                        Layout: kv/zonetree, kv/fastdb, kv/rocksdb, snapshots/.");
         Console.WriteLine("  --auth-provider <v>   Override runtime auth provider: 'litegraph' or 'windows'.");
+        Console.WriteLine("  --enable-cluster      Enable Akka.NET cluster bootstrap runtime.");
+        Console.WriteLine("  --cluster-port <port> Cluster transport port (default: 8110). Requires server mode.");
         Console.WriteLine("Environment auth options:");
         Console.WriteLine("  WEBNET_AUTH_PROVIDER                  'litegraph' (default) or 'windows'.");
         Console.WriteLine("  WEBNET_AUTH_WINDOWS_ALLOWED_SUBJECTS  Optional CSV/semicolon allow-list for Windows mode.");
@@ -649,11 +733,13 @@ internal sealed record CliOptions(
     bool FailOnSelfCheck,
     bool SelfCheckOnly,
     string? DataRoot,
-    AuthProvider? AuthProviderOverride)
+    AuthProvider? AuthProviderOverride,
+    bool EnableCluster,
+    int ClusterPort)
 {
-    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride = null) =>
-        new("server", port, null, failOnSelfCheck, selfCheckOnly, dataRoot, authProviderOverride);
+    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride = null, bool enableCluster = false, int clusterPort = 8110) =>
+        new("server", port, null, failOnSelfCheck, selfCheckOnly, dataRoot, authProviderOverride, enableCluster, clusterPort);
 
     public static CliOptions Client(string hostName, int port) =>
-        new("client", port, hostName, false, false, null, null);
+        new("client", port, hostName, false, false, null, null, false, 8110);
 }

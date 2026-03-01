@@ -100,6 +100,18 @@ dotnet run -- server 7071 --fail-on-self-check
 dotnet run -- server --auth-provider windows
 ```
 
+- Start server with Akka.NET cluster bootstrap enabled:
+
+```powershell
+dotnet run -- server --enable-cluster
+```
+
+- Start server with Akka.NET cluster bootstrap and explicit cluster port:
+
+```powershell
+dotnet run -- server --enable-cluster --cluster-port 8210
+```
+
 - Run internal self-check only (no TCP listener):
 
 ```powershell
