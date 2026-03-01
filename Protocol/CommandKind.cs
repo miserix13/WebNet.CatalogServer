@@ -9,6 +9,9 @@ public enum CommandKind
     CreateCatalog = 10,
     DropCatalog = 11,
     ListCatalogs = 12,
+    PutDocument = 20,
+    GetDocument = 21,
+    DeleteDocument = 22,
     Health = 100,
     Metrics = 101
 }

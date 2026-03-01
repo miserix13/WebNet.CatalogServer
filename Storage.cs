@@ -107,6 +107,7 @@
                 };
 
                 database.Catalogs[request.CatalogName] = catalog;
+                database.DocumentsByCatalog[request.CatalogName] = new Dictionary<Guid, Document>();
 
                 return Task.FromResult(OperationResult<CatalogMetadata>.Ok(new CatalogMetadata(
                     catalog.Id,
@@ -133,6 +134,8 @@
                     return Task.FromResult(OperationResult<DropCatalogResponse>.Fail("catalog.not_found", $"Catalog '{request.CatalogName}' was not found in database '{request.DatabaseName}'."));
                 }
 
+                database.DocumentsByCatalog.Remove(request.CatalogName);
+
                 return Task.FromResult(OperationResult<DropCatalogResponse>.Ok(new DropCatalogResponse(request.DatabaseName, request.CatalogName, true)));
             }
         }
@@ -157,26 +160,139 @@
             }
         }
 
+        public Task<OperationResult<PutDocumentResponse>> PutDocumentAsync(PutDocumentRequest request, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (request.Document is null)
+            {
+                return Task.FromResult(OperationResult<PutDocumentResponse>.Fail("doc.invalid", "Document is required."));
+            }
+
+            if (!this.TryGetCatalog(request.DatabaseName, request.CatalogName, out var documentMap, out var error))
+            {
+                return Task.FromResult(OperationResult<PutDocumentResponse>.Fail(error!.ErrorCode, error.ErrorMessage));
+            }
+
+            lock (this.sync)
+            {
+                var replacedExisting = documentMap!.ContainsKey(request.Document.DocumentId);
+                documentMap[request.Document.DocumentId] = request.Document;
+
+                return Task.FromResult(OperationResult<PutDocumentResponse>.Ok(new PutDocumentResponse(
+                    request.DatabaseName,
+                    request.CatalogName,
+                    request.Document.DocumentId,
+                    replacedExisting)));
+            }
+        }
+
+        public Task<OperationResult<GetDocumentResponse>> GetDocumentAsync(GetDocumentRequest request, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!this.TryGetCatalog(request.DatabaseName, request.CatalogName, out var documentMap, out var error))
+            {
+                return Task.FromResult(OperationResult<GetDocumentResponse>.Fail(error!.ErrorCode, error.ErrorMessage));
+            }
+
+            lock (this.sync)
+            {
+                if (!documentMap!.TryGetValue(request.DocumentId, out var document))
+                {
+                    return Task.FromResult(OperationResult<GetDocumentResponse>.Fail("doc.not_found", $"Document '{request.DocumentId}' was not found in catalog '{request.CatalogName}'."));
+                }
+
+                return Task.FromResult(OperationResult<GetDocumentResponse>.Ok(new GetDocumentResponse(
+                    request.DatabaseName,
+                    request.CatalogName,
+                    document)));
+            }
+        }
+
+        public Task<OperationResult<DeleteDocumentResponse>> DeleteDocumentAsync(DeleteDocumentRequest request, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!this.TryGetCatalog(request.DatabaseName, request.CatalogName, out var documentMap, out var error))
+            {
+                return Task.FromResult(OperationResult<DeleteDocumentResponse>.Fail(error!.ErrorCode, error.ErrorMessage));
+            }
+
+            lock (this.sync)
+            {
+                var removed = documentMap!.Remove(request.DocumentId);
+                if (!removed)
+                {
+                    return Task.FromResult(OperationResult<DeleteDocumentResponse>.Fail("doc.not_found", $"Document '{request.DocumentId}' was not found in catalog '{request.CatalogName}'."));
+                }
+
+                return Task.FromResult(OperationResult<DeleteDocumentResponse>.Ok(new DeleteDocumentResponse(
+                    request.DatabaseName,
+                    request.CatalogName,
+                    request.DocumentId,
+                    true)));
+            }
+        }
+
         public StorageStatistics GetStatistics()
         {
             lock (this.sync)
             {
                 var catalogCount = 0;
                 var catalogItemCount = 0;
+                var documentCount = 0;
 
                 foreach (var database in this.databases.Values)
                 {
                     catalogCount += database.Catalogs.Count;
                     catalogItemCount += database.Catalogs.Values.Sum(catalog => catalog.Count);
+                    documentCount += database.DocumentsByCatalog.Values.Sum(map => map.Count);
                 }
 
                 return new StorageStatistics(
                     this.databases.Count,
                     catalogCount,
                     catalogItemCount,
-                    0,
+                    documentCount,
                     this.primaryDatabaseName);
             }
+        }
+
+        private bool TryGetCatalog(string databaseName, string catalogName, out Dictionary<Guid, Document>? documentMap, out OperationError? error)
+        {
+            documentMap = null;
+
+            if (!this.TryGetDatabase(databaseName, out var database, out error))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(catalogName))
+            {
+                error = new OperationError("catalog.invalid_name", "Catalog name is required.");
+                return false;
+            }
+
+            lock (this.sync)
+            {
+                if (!database!.Catalogs.ContainsKey(catalogName))
+                {
+                    error = new OperationError("catalog.not_found", $"Catalog '{catalogName}' was not found in database '{databaseName}'.");
+                    return false;
+                }
+
+                if (!database.DocumentsByCatalog.TryGetValue(catalogName, out documentMap))
+                {
+                    error = new OperationError(
+                        "storage.invariant_violation",
+                        $"Catalog '{catalogName}' in database '{databaseName}' is missing its document map.");
+                    return false;
+                }
+            }
+
+            error = null;
+            return true;
         }
 
         private bool TryGetDatabase(string databaseName, out DatabaseState? state, out OperationError? error)
@@ -219,11 +335,14 @@
             {
                 this.Metadata = metadata;
                 this.Catalogs = new Dictionary<string, Catalog>(StringComparer.OrdinalIgnoreCase);
+                this.DocumentsByCatalog = new Dictionary<string, Dictionary<Guid, Document>>(StringComparer.OrdinalIgnoreCase);
             }
 
             public DatabaseMetadata Metadata { get; set; }
 
             public Dictionary<string, Catalog> Catalogs { get; }
+
+            public Dictionary<string, Dictionary<Guid, Document>> DocumentsByCatalog { get; }
         }
 
     }

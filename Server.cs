@@ -72,6 +72,9 @@ namespace WebNet.CatalogServer
                 CommandKind.CreateCatalog => await this.HandleCreateCatalogAsync(request, cancellationToken),
                 CommandKind.DropCatalog => await this.HandleDropCatalogAsync(request, cancellationToken),
                 CommandKind.ListCatalogs => await this.HandleListCatalogsAsync(request, cancellationToken),
+                CommandKind.PutDocument => await this.HandlePutDocumentAsync(request, cancellationToken),
+                CommandKind.GetDocument => await this.HandleGetDocumentAsync(request, cancellationToken),
+                CommandKind.DeleteDocument => await this.HandleDeleteDocumentAsync(request, cancellationToken),
                 CommandKind.Health => await this.HandleHealthAsync(request, cancellationToken),
                 CommandKind.Metrics => await this.HandleMetricsAsync(request, cancellationToken),
                 _ => ResponseEnvelope.Error(request.RequestId, "command.unsupported", $"Unsupported command '{request.Command}'.")
@@ -127,6 +130,33 @@ namespace WebNet.CatalogServer
         {
             var payload = MessagePackSerializer.Deserialize<ListCatalogsRequest>(request.Payload);
             var result = await this.storage.ListCatalogsAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandlePutDocumentAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<PutDocumentRequest>(request.Payload);
+            var result = await this.storage.PutDocumentAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleGetDocumentAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<GetDocumentRequest>(request.Payload);
+            var result = await this.storage.GetDocumentAsync(payload, cancellationToken);
+            return result.IsSuccess
+                ? ResponseEnvelope.Success(request.RequestId, result.Value)
+                : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);
+        }
+
+        private async Task<ResponseEnvelope> HandleDeleteDocumentAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            var payload = MessagePackSerializer.Deserialize<DeleteDocumentRequest>(request.Payload);
+            var result = await this.storage.DeleteDocumentAsync(payload, cancellationToken);
             return result.IsSuccess
                 ? ResponseEnvelope.Success(request.RequestId, result.Value)
                 : ResponseEnvelope.Error(request.RequestId, result.ErrorCode, result.ErrorMessage);

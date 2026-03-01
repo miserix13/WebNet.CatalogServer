@@ -28,6 +28,24 @@ public record DropCatalogRequest(
 public record ListCatalogsRequest([property: Key(0)] string DatabaseName);
 
 [MessagePackObject]
+public record PutDocumentRequest(
+    [property: Key(0)] string DatabaseName,
+    [property: Key(1)] string CatalogName,
+    [property: Key(2)] Document Document);
+
+[MessagePackObject]
+public record GetDocumentRequest(
+    [property: Key(0)] string DatabaseName,
+    [property: Key(1)] string CatalogName,
+    [property: Key(2)] Guid DocumentId);
+
+[MessagePackObject]
+public record DeleteDocumentRequest(
+    [property: Key(0)] string DatabaseName,
+    [property: Key(1)] string CatalogName,
+    [property: Key(2)] Guid DocumentId);
+
+[MessagePackObject]
 public record HealthRequest;
 
 [MessagePackObject]

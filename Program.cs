@@ -64,6 +64,58 @@ internal static class Program
         var createDbResponse = await SendAsync(stream, createDbRequest);
         Console.WriteLine($"CreateDatabase => success={createDbResponse.IsSuccess}, error={createDbResponse.ErrorCode}");
 
+        var createCatalogRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.CreateCatalog,
+            new CreateCatalogRequest("default", "products"));
+
+        var createCatalogResponse = await SendAsync(stream, createCatalogRequest);
+        Console.WriteLine($"CreateCatalog => success={createCatalogResponse.IsSuccess}, error={createCatalogResponse.ErrorCode}");
+
+        var documentId = Guid.NewGuid();
+        var putDocumentRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.PutDocument,
+            new PutDocumentRequest(
+                "default",
+                "products",
+                new Document
+                {
+                    DocumentId = documentId,
+                    Properties =
+                    {
+                        ["sku"] = "ABC-123",
+                        ["name"] = "Sample Product"
+                    }
+                }));
+
+        var putDocumentResponse = await SendAsync(stream, putDocumentRequest);
+        Console.WriteLine($"PutDocument => success={putDocumentResponse.IsSuccess}, error={putDocumentResponse.ErrorCode}");
+
+        var getDocumentRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.GetDocument,
+            new GetDocumentRequest("default", "products", documentId));
+
+        var getDocumentResponse = await SendAsync(stream, getDocumentRequest);
+        if (getDocumentResponse.IsSuccess)
+        {
+            var getPayload = MessagePackSerializer.Deserialize<GetDocumentResponse>(getDocumentResponse.Payload);
+            Console.WriteLine($"GetDocument => success=True, name={getPayload.Document.Properties.GetValueOrDefault("name")}");
+        }
+        else
+        {
+            Console.WriteLine($"GetDocument => success=False, error={getDocumentResponse.ErrorCode}");
+        }
+
+        var deleteDocumentRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.DeleteDocument,
+            new DeleteDocumentRequest("default", "products", documentId));
+
+        var deleteDocumentResponse = await SendAsync(stream, deleteDocumentRequest);
+        Console.WriteLine($"DeleteDocument => success={deleteDocumentResponse.IsSuccess}, error={deleteDocumentResponse.ErrorCode}");
+
         var listDbRequest = RequestEnvelope.FromPayload(
             Guid.NewGuid(),
             CommandKind.ListDatabases,

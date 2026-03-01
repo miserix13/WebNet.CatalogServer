@@ -21,6 +21,26 @@ public record ListCatalogsResponse(
     [property: Key(0)] string DatabaseName,
     [property: Key(1)] IReadOnlyCollection<CatalogMetadata> Catalogs);
 
+[MessagePackObject]
+public record PutDocumentResponse(
+    [property: Key(0)] string DatabaseName,
+    [property: Key(1)] string CatalogName,
+    [property: Key(2)] Guid DocumentId,
+    [property: Key(3)] bool ReplacedExisting);
+
+[MessagePackObject]
+public record GetDocumentResponse(
+    [property: Key(0)] string DatabaseName,
+    [property: Key(1)] string CatalogName,
+    [property: Key(2)] Document Document);
+
+[MessagePackObject]
+public record DeleteDocumentResponse(
+    [property: Key(0)] string DatabaseName,
+    [property: Key(1)] string CatalogName,
+    [property: Key(2)] Guid DocumentId,
+    [property: Key(3)] bool Deleted);
+
 public enum ServerHealthStatus
 {
     Healthy = 0,
