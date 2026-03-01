@@ -140,3 +140,4 @@ C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\bin\Debug\net10.0\runti
 C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\bin\Debug\net10.0\runtimes\win\lib\net6.0\System.Windows.Extensions.dll
 C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.C.DFC998CE.Up2Date
 C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\obj\Debug\net10.0\WebNet.CatalogServer.genruntimeconfig.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\bin\Debug\net10.0\Microsoft.Extensions.Logging.Console.dll

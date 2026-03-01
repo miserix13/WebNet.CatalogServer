@@ -168,12 +168,18 @@ namespace WebNet.CatalogServer
         {
             _ = MessagePackSerializer.Deserialize<HealthRequest>(request.Payload);
             var stats = this.storage.GetStatistics();
+            var selfCheck = this.storage.RunSelfCheck();
+            var status = selfCheck.IsHealthy ? ServerHealthStatus.Healthy : ServerHealthStatus.Degraded;
             var response = new HealthResponse(
-                ServerHealthStatus.Healthy,
+                status,
                 this.startedAtUtc,
                 this.timeProvider.GetUtcNow() - this.startedAtUtc,
                 stats.DatabaseCount,
-                stats.CatalogCount);
+                stats.CatalogCount,
+                stats.DocumentCount,
+                stats.PrimaryDatabaseName,
+                selfCheck.IssueCount,
+                this.IsRunning);
 
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
         }
@@ -182,13 +188,34 @@ namespace WebNet.CatalogServer
         {
             _ = MessagePackSerializer.Deserialize<MetricsRequest>(request.Payload);
             var stats = this.storage.GetStatistics();
+            var selfCheck = this.storage.RunSelfCheck();
+            var maintenance = KvMaintenanceDiagnostics.Snapshot();
+            var transport = TransportAbuseDiagnostics.Snapshot();
+            var now = this.timeProvider.GetUtcNow();
+            var uptime = this.startedAtUtc == DateTimeOffset.MinValue ? TimeSpan.Zero : now - this.startedAtUtc;
             var response = new MetricsResponse(
                 new Dictionary<string, double>
                 {
                     ["database.count"] = stats.DatabaseCount,
                     ["catalog.count"] = stats.CatalogCount,
                     ["catalog.items.total"] = stats.CatalogItemCount,
-                    ["documents.total"] = stats.DocumentCount
+                    ["documents.total"] = stats.DocumentCount,
+                    ["server.uptime.seconds"] = Math.Max(0, uptime.TotalSeconds),
+                    ["server.running"] = this.IsRunning ? 1 : 0,
+                    ["selfcheck.healthy"] = selfCheck.IsHealthy ? 1 : 0,
+                    ["selfcheck.issue.count"] = selfCheck.IssueCount,
+                    ["maintenance.zonetree.failures"] = maintenance.ZoneTreeFailures,
+                    ["maintenance.rocksdb.failures"] = maintenance.RocksDbFailures,
+                    ["maintenance.fastdb.failures"] = maintenance.FastDbFailures,
+                    ["maintenance.failures.total"] = maintenance.ZoneTreeFailures + maintenance.RocksDbFailures + maintenance.FastDbFailures,
+                    ["transport.rate_limited.total"] = transport.RateLimitedRequests,
+                    ["transport.rejected_connections.total"] = transport.RejectedConnections,
+                    ["transport.read_timeouts.total"] = transport.ReadTimeouts,
+                    ["transport.invalid_frames.total"] = transport.InvalidFrames,
+                    ["transport.invalid_requests.total"] = transport.InvalidRequests,
+                    ["transport.dispatch_errors.total"] = transport.DispatchErrors,
+                    ["transport.protocol_disconnects.total"] = transport.ProtocolDisconnects,
+                    ["transport.abuse.total"] = transport.RateLimitedRequests + transport.RejectedConnections + transport.ReadTimeouts + transport.InvalidFrames + transport.InvalidRequests + transport.DispatchErrors + transport.ProtocolDisconnects
                 });
 
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));

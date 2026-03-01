@@ -226,3 +226,4 @@ C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogSer
 C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogServer.Tests\obj\Debug\net10.0\WebNet.CatalogServer.Tests.pdb
 C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogServer.Tests\obj\Debug\net10.0\WebNet.CatalogServer.Tests.genruntimeconfig.cache
 C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogServer.Tests\obj\Debug\net10.0\ref\WebNet.CatalogServer.Tests.dll
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogServer.Tests\bin\Debug\net10.0\Microsoft.Extensions.Logging.Console.dll

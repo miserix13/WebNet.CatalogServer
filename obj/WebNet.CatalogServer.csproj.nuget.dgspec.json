@@ -87,6 +87,10 @@
               "target": "Package",
               "version": "[3.1.4, )"
             },
+            "Microsoft.Extensions.Logging.Console": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
             "RocksDB": {
               "target": "Package",
               "version": "[10.4.2.64152, )"

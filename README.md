@@ -68,6 +68,8 @@
 dotnet run -- server
 ```
 
+Server lifecycle events (startup checks, ready state, shutdown path) are now emitted as structured JSON logs.
+
 - Start server with explicit storage root (and strict startup checks):
 
 ```powershell
@@ -126,3 +128,4 @@ dotnet run -- client 127.0.0.1 7070
 
 The smoke-test client now includes internal `SelfCheck` and `MaintenanceDiagnostics` management commands.
 `MaintenanceDiagnostics` now reports both KV-engine maintenance counters and transport abuse counters (rate-limited requests, rejected connections, read timeouts, invalid frames/requests, dispatch errors, and protocol disconnects).
+The smoke-test client also reports expanded `Health` and `Metrics` output, including lifecycle and self-check signals.

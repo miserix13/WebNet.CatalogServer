@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net.Sockets;
 using MessagePack;
+using Microsoft.Extensions.Logging;
 
 namespace WebNet.CatalogServer;
 
@@ -32,6 +34,19 @@ internal static class Program
 
     private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride)
     {
+        using var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.ClearProviders();
+            builder.SetMinimumLevel(LogLevel.Information);
+            builder.AddJsonConsole(options =>
+            {
+                options.TimestampFormat = "O";
+                options.IncludeScopes = false;
+            });
+        });
+        var logger = loggerFactory.CreateLogger("WebNet.CatalogServer.Program");
+
+        var startupStopwatch = Stopwatch.StartNew();
         var layout = StorageDirectoryLayout.Resolve(dataRoot);
         var fileSystemCheck = StorageFilesystemValidator.EnsureAndValidate(layout);
         var storage = new Storage(new MultiEngineStoragePersistenceAdapter(layout));
@@ -42,7 +57,7 @@ internal static class Program
         }
         catch (LiteGraphAuthOptions.AuthConfigurationException ex)
         {
-            Console.Error.WriteLine($"Configuration error: {ex.Message}");
+            logger.LogError("Configuration error: {ErrorMessage}", ex.Message);
             Environment.ExitCode = 64;
             return;
         }
@@ -58,49 +73,100 @@ internal static class Program
         var combinedIssues = fileSystemCheck.Issues.Concat(storageCheck.Issues).ToArray();
         var isHealthy = combinedIssues.Length == 0;
 
-        Console.WriteLine($"Storage roots => data='{layout.DataRoot}', zonetree='{layout.ZoneTreeRoot}', fastdb='{layout.FastDbRoot}', rocksdb='{layout.RocksDbRoot}', snapshot='{layout.SnapshotFilePath}'");
-        Console.WriteLine($"Auth => provider={authOptions.Provider}, litegraph='{authOptions.DatabaseFilePath}', bootstrap={authOptions.BootstrapCredentialEnabled}, windows-allowlist={authOptions.AllowedWindowsSubjects.Count}, cert-allowlist={authOptions.AllowedCertificateThumbprints.Count}, strict-policy={authOptions.RequireFullCommandPolicy}, override-mapped-commands={authOptions.OverrideMappedCommandCount}");
-        Console.WriteLine($"Startup SelfCheck => healthy={isHealthy}, issues={combinedIssues.Length}");
+        logger.LogInformation(
+            "Storage roots configured: data={DataRoot}, zonetree={ZoneTreeRoot}, fastdb={FastDbRoot}, rocksdb={RocksDbRoot}, snapshot={SnapshotFilePath}",
+            layout.DataRoot,
+            layout.ZoneTreeRoot,
+            layout.FastDbRoot,
+            layout.RocksDbRoot,
+            layout.SnapshotFilePath);
+        logger.LogInformation(
+            "Auth configured: provider={Provider}, litegraph={DatabaseFilePath}, bootstrap={BootstrapEnabled}, windowsAllowListCount={WindowsAllowListCount}, certAllowListCount={CertAllowListCount}, strictPolicy={StrictPolicy}, overrideMappedCommands={OverrideMappedCommands}",
+            authOptions.Provider,
+            authOptions.DatabaseFilePath,
+            authOptions.BootstrapCredentialEnabled,
+            authOptions.AllowedWindowsSubjects.Count,
+            authOptions.AllowedCertificateThumbprints.Count,
+            authOptions.RequireFullCommandPolicy,
+            authOptions.OverrideMappedCommandCount);
+        logger.LogInformation("Startup self-check completed: healthy={IsHealthy}, issueCount={IssueCount}", isHealthy, combinedIssues.Length);
         foreach (var issue in combinedIssues)
         {
-            Console.WriteLine($"   ! {issue.Code}: {issue.Message}");
+            logger.LogWarning("Startup issue detected: code={IssueCode}, message={IssueMessage}", issue.Code, issue.Message);
         }
 
         if (selfCheckOnly)
         {
             Environment.ExitCode = isHealthy ? 0 : 2;
+            logger.LogInformation("Self-check-only mode exit: code={ExitCode}, startupDurationMs={StartupDurationMs}", Environment.ExitCode, startupStopwatch.Elapsed.TotalMilliseconds);
             return;
         }
 
         if (failOnSelfCheck && !isHealthy)
         {
-            Console.Error.WriteLine("Startup aborted due to --fail-on-self-check and failing invariants.");
+            logger.LogError("Startup aborted due to fail-on-self-check with failing invariants.");
             Environment.ExitCode = 1;
             return;
         }
 
+        ConsoleCancelEventHandler? onCancel = null;
         try
         {
             server.Start();
             await using var host = server.CreateTcpHost(TcpServerOptions.Default with { Port = port });
             await host.StartAsync();
 
+            if (!host.IsRunning)
+            {
+                logger.LogError("Lifecycle check failed: TCP host not running after StartAsync.");
+                Environment.ExitCode = 1;
+                server.Stop();
+                return;
+            }
+
+            startupStopwatch.Stop();
+            logger.LogInformation("Server startup completed: endpoint=tcp://0.0.0.0:{Port}, startupDurationMs={StartupDurationMs}", port, startupStopwatch.Elapsed.TotalMilliseconds);
+
             Console.WriteLine($"WebNet.CatalogServer listening on tcp://0.0.0.0:{port}");
             Console.WriteLine("Press Ctrl+C to stop.");
 
             var shutdown = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Console.CancelKeyPress += (_, e) =>
+            onCancel = (_, e) =>
             {
                 e.Cancel = true;
                 shutdown.TrySetResult(true);
+                logger.LogInformation("Shutdown signal received from console.");
             };
+            Console.CancelKeyPress += onCancel;
 
             await shutdown.Task;
+
+            var shutdownStopwatch = Stopwatch.StartNew();
             server.Stop();
-            await host.StopAsync();
+
+            using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await host.StopAsync(shutdownTimeout.Token);
+
+            shutdownStopwatch.Stop();
+            logger.LogInformation("Server shutdown completed: serverRunning={ServerRunning}, hostRunning={HostRunning}, shutdownDurationMs={ShutdownDurationMs}", server.IsRunning, host.IsRunning, shutdownStopwatch.Elapsed.TotalMilliseconds);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogError("Shutdown lifecycle check failed: host did not stop within timeout.");
+            Environment.ExitCode = 1;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled server lifecycle exception.");
+            Environment.ExitCode = 1;
         }
         finally
         {
+            if (onCancel is not null)
+            {
+                Console.CancelKeyPress -= onCancel;
+            }
+
             if (tokenAuthorizer is IDisposable disposableAuthorizer)
             {
                 disposableAuthorizer.Dispose();
@@ -183,6 +249,38 @@ internal static class Program
 
         var deleteDocumentResponse = await SendAsync(stream, deleteDocumentRequest);
         Console.WriteLine($"DeleteDocument => success={deleteDocumentResponse.IsSuccess}, error={deleteDocumentResponse.ErrorCode}");
+
+        var healthRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.Health,
+            new HealthRequest());
+
+        var healthResponse = await SendAsync(stream, healthRequest);
+        if (healthResponse.IsSuccess)
+        {
+            var healthPayload = MessagePackSerializer.Deserialize<HealthResponse>(healthResponse.Payload);
+            Console.WriteLine($"Health => status={healthPayload.Status}, running={healthPayload.IsRunning}, db={healthPayload.DatabaseCount}, catalogs={healthPayload.CatalogCount}, docs={healthPayload.DocumentCount}, primary={healthPayload.PrimaryDatabaseName}, selfcheck_issues={healthPayload.SelfCheckIssueCount}, uptime={healthPayload.Uptime}");
+        }
+        else
+        {
+            Console.WriteLine($"Health => success=False, error={healthResponse.ErrorCode}");
+        }
+
+        var metricsRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.Metrics,
+            new MetricsRequest());
+
+        var metricsResponse = await SendAsync(stream, metricsRequest);
+        if (metricsResponse.IsSuccess)
+        {
+            var metricsPayload = MessagePackSerializer.Deserialize<MetricsResponse>(metricsResponse.Payload);
+            Console.WriteLine($"Metrics => keys={metricsPayload.Values.Count}, uptime_seconds={metricsPayload.Values.GetValueOrDefault("server.uptime.seconds")}, selfcheck_issues={metricsPayload.Values.GetValueOrDefault("selfcheck.issue.count")}, transport_abuse_total={metricsPayload.Values.GetValueOrDefault("transport.abuse.total")}");
+        }
+        else
+        {
+            Console.WriteLine($"Metrics => success=False, error={metricsResponse.ErrorCode}");
+        }
 
         var selfCheckRequest = RequestEnvelope.FromPayload(
             Guid.NewGuid(),

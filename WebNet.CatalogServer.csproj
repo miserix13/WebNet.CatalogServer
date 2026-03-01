@@ -23,6 +23,7 @@
     <PackageReference Include="DotNetty.Transport" Version="0.7.6" />
     <PackageReference Include="LiteGraph" Version="5.0.2" />
     <PackageReference Include="MessagePack" Version="3.1.4" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.10" />
     <PackageReference Include="RocksDB" Version="10.4.2.64152" />
     <PackageReference Include="Stellar.FastDB" Version="1.1.1" />
     <PackageReference Include="ZoneTree" Version="1.8.6" />
