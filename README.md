@@ -141,5 +141,6 @@ dotnet run -- client 127.0.0.1 7070
 The smoke-test client now includes internal `SelfCheck` and `MaintenanceDiagnostics` management commands.
 `MaintenanceDiagnostics` now reports both KV-engine maintenance counters and transport abuse counters (rate-limited requests, rejected connections, read timeouts, invalid frames/requests, dispatch errors, and protocol disconnects).
 The smoke-test client also reports expanded `Health` and `Metrics` output, including lifecycle and self-check signals.
+When cluster bootstrap is enabled, `Health` and `Metrics` also expose cluster runtime status (`cluster.enabled`, `cluster.running`, `cluster.members.count`).
 
 Integration test coverage includes TCP end-to-end command flow, TCP auth failure paths, and storage recovery across process restarts.

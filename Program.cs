@@ -45,6 +45,7 @@ internal static class Program
             });
         });
         var logger = loggerFactory.CreateLogger("WebNet.CatalogServer.Program");
+        ClusterRuntimeDiagnostics.Configure(enableCluster, "webnet-catalog", "127.0.0.1", clusterPort);
 
         var startupStopwatch = Stopwatch.StartNew();
         var layout = StorageDirectoryLayout.Resolve(dataRoot);
@@ -117,6 +118,7 @@ internal static class Program
             {
                 clusterRuntime = new AkkaClusterRuntime(AkkaClusterOptions.CreateDefault(clusterPort));
                 await clusterRuntime.StartAsync();
+                ClusterRuntimeDiagnostics.SetRunning(true, clusterRuntime.GetMemberCount());
                 logger.LogInformation("Akka cluster runtime started: enabled={ClusterEnabled}, system={SystemName}, host={Host}, port={Port}",
                     true,
                     "webnet-catalog",
@@ -186,6 +188,7 @@ internal static class Program
 
             if (clusterRuntime is not null)
             {
+                ClusterRuntimeDiagnostics.SetRunning(false, 0);
                 await clusterRuntime.DisposeAsync();
                 logger.LogInformation("Akka cluster runtime stopped.");
             }
@@ -277,7 +280,7 @@ internal static class Program
         if (healthResponse.IsSuccess)
         {
             var healthPayload = MessagePackSerializer.Deserialize<HealthResponse>(healthResponse.Payload);
-            Console.WriteLine($"Health => status={healthPayload.Status}, running={healthPayload.IsRunning}, db={healthPayload.DatabaseCount}, catalogs={healthPayload.CatalogCount}, docs={healthPayload.DocumentCount}, primary={healthPayload.PrimaryDatabaseName}, selfcheck_issues={healthPayload.SelfCheckIssueCount}, uptime={healthPayload.Uptime}");
+            Console.WriteLine($"Health => status={healthPayload.Status}, running={healthPayload.IsRunning}, db={healthPayload.DatabaseCount}, catalogs={healthPayload.CatalogCount}, docs={healthPayload.DocumentCount}, primary={healthPayload.PrimaryDatabaseName}, selfcheck_issues={healthPayload.SelfCheckIssueCount}, cluster(enabled={healthPayload.ClusterEnabled}, running={healthPayload.ClusterRunning}, members={healthPayload.ClusterMemberCount}, system={healthPayload.ClusterSystemName}, host={healthPayload.ClusterHostname}, port={healthPayload.ClusterPort}), uptime={healthPayload.Uptime}");
         }
         else
         {

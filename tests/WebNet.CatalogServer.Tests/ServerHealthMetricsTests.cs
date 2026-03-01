@@ -8,6 +8,9 @@ public sealed class ServerHealthMetricsTests
     [Fact]
     public async Task HealthCommand_ReturnsExpandedOperationalFields()
     {
+        ClusterRuntimeDiagnostics.Configure(false, "webnet-catalog", "127.0.0.1", 8110);
+        ClusterRuntimeDiagnostics.SetRunning(false, 0);
+
         var snapshotPath = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"), "store.snapshot.mpk");
         var storage = new Storage(new FileStoragePersistenceAdapter(snapshotPath));
         var server = new Server(storage, new AllowAllTokenAuthorizer(), new AllowAllClientCertificateValidator());
@@ -37,6 +40,12 @@ public sealed class ServerHealthMetricsTests
             Assert.Equal(0, payload.DocumentCount);
             Assert.Equal("default", payload.PrimaryDatabaseName);
             Assert.Equal(0, payload.SelfCheckIssueCount);
+            Assert.False(payload.ClusterEnabled);
+            Assert.False(payload.ClusterRunning);
+            Assert.Equal("webnet-catalog", payload.ClusterSystemName);
+            Assert.Equal("127.0.0.1", payload.ClusterHostname);
+            Assert.Equal(8110, payload.ClusterPort);
+            Assert.Equal(0, payload.ClusterMemberCount);
         }
         finally
         {
@@ -47,6 +56,8 @@ public sealed class ServerHealthMetricsTests
     [Fact]
     public async Task MetricsCommand_IncludesLifecycleAndTransportKeys()
     {
+        ClusterRuntimeDiagnostics.Configure(false, "webnet-catalog", "127.0.0.1", 8110);
+        ClusterRuntimeDiagnostics.SetRunning(false, 0);
         TransportAbuseDiagnostics.Reset();
         KvMaintenanceDiagnostics.Reset();
 
@@ -72,6 +83,9 @@ public sealed class ServerHealthMetricsTests
             Assert.True(payload.Values.ContainsKey("maintenance.failures.total"));
             Assert.True(payload.Values.ContainsKey("transport.abuse.total"));
             Assert.True(payload.Values.ContainsKey("transport.rate_limited.total"));
+            Assert.True(payload.Values.ContainsKey("cluster.enabled"));
+            Assert.True(payload.Values.ContainsKey("cluster.running"));
+            Assert.True(payload.Values.ContainsKey("cluster.members.count"));
         }
         finally
         {

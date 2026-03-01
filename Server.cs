@@ -170,6 +170,7 @@ namespace WebNet.CatalogServer
             var stats = this.storage.GetStatistics();
             var selfCheck = this.storage.RunSelfCheck();
             var status = selfCheck.IsHealthy ? ServerHealthStatus.Healthy : ServerHealthStatus.Degraded;
+            var cluster = ClusterRuntimeDiagnostics.Snapshot();
             var response = new HealthResponse(
                 status,
                 this.startedAtUtc,
@@ -179,7 +180,13 @@ namespace WebNet.CatalogServer
                 stats.DocumentCount,
                 stats.PrimaryDatabaseName,
                 selfCheck.IssueCount,
-                this.IsRunning);
+                this.IsRunning,
+                cluster.Enabled,
+                cluster.Running,
+                cluster.SystemName,
+                cluster.Hostname,
+                cluster.Port,
+                cluster.MemberCount);
 
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
         }
@@ -191,6 +198,7 @@ namespace WebNet.CatalogServer
             var selfCheck = this.storage.RunSelfCheck();
             var maintenance = KvMaintenanceDiagnostics.Snapshot();
             var transport = TransportAbuseDiagnostics.Snapshot();
+            var cluster = ClusterRuntimeDiagnostics.Snapshot();
             var now = this.timeProvider.GetUtcNow();
             var uptime = this.startedAtUtc == DateTimeOffset.MinValue ? TimeSpan.Zero : now - this.startedAtUtc;
             var response = new MetricsResponse(
@@ -215,7 +223,10 @@ namespace WebNet.CatalogServer
                     ["transport.invalid_requests.total"] = transport.InvalidRequests,
                     ["transport.dispatch_errors.total"] = transport.DispatchErrors,
                     ["transport.protocol_disconnects.total"] = transport.ProtocolDisconnects,
-                    ["transport.abuse.total"] = transport.RateLimitedRequests + transport.RejectedConnections + transport.ReadTimeouts + transport.InvalidFrames + transport.InvalidRequests + transport.DispatchErrors + transport.ProtocolDisconnects
+                    ["transport.abuse.total"] = transport.RateLimitedRequests + transport.RejectedConnections + transport.ReadTimeouts + transport.InvalidFrames + transport.InvalidRequests + transport.DispatchErrors + transport.ProtocolDisconnects,
+                    ["cluster.enabled"] = cluster.Enabled ? 1 : 0,
+                    ["cluster.running"] = cluster.Running ? 1 : 0,
+                    ["cluster.members.count"] = cluster.MemberCount
                 });
 
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));

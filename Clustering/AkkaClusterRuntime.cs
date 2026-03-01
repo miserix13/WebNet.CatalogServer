@@ -16,6 +16,17 @@ public sealed class AkkaClusterRuntime : IAsyncDisposable
 
     public bool IsRunning => this.system is not null;
 
+    public int GetMemberCount()
+    {
+        if (this.system is null)
+        {
+            return 0;
+        }
+
+        var state = Cluster.Get(this.system).State;
+        return state.Members.Count;
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (this.system is not null)

@@ -58,7 +58,13 @@ public record HealthResponse(
     [property: Key(5)] int DocumentCount,
     [property: Key(6)] string? PrimaryDatabaseName,
     [property: Key(7)] int SelfCheckIssueCount,
-    [property: Key(8)] bool IsRunning);
+    [property: Key(8)] bool IsRunning,
+    [property: Key(9)] bool ClusterEnabled,
+    [property: Key(10)] bool ClusterRunning,
+    [property: Key(11)] string? ClusterSystemName,
+    [property: Key(12)] string? ClusterHostname,
+    [property: Key(13)] int ClusterPort,
+    [property: Key(14)] int ClusterMemberCount);
 
 [MessagePackObject]
 public record MetricsResponse([property: Key(0)] IReadOnlyDictionary<string, double> Values);
