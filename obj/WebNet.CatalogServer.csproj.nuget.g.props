@@ -13,4 +13,7 @@
     <SourceRoot Include="C:\Users\jojow.WEBSTER\.nuget\packages\" />
     <SourceRoot Include="C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages\" />
   </ItemGroup>
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgAkka_Analyzers Condition=" '$(PkgAkka_Analyzers)' == '' ">C:\Users\jojow.WEBSTER\.nuget\packages\akka.analyzers\0.3.3</PkgAkka_Analyzers>
+  </PropertyGroup>
 </Project>

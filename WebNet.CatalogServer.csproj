@@ -6,4 +6,19 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Akka.Cluster" Version="1.5.61" />
+    <PackageReference Include="Akka.Cluster.Sharding" Version="1.5.61" />
+    <PackageReference Include="Akka.Hosting" Version="1.5.61" />
+    <PackageReference Include="Akka.Persistence.Sqlite" Version="1.5.39" />
+    <PackageReference Include="BeetleX" Version="1.8.24.435" />
+    <PackageReference Include="DotNetty.Codecs" Version="0.7.6" />
+    <PackageReference Include="DotNetty.Transport" Version="0.7.6" />
+    <PackageReference Include="LiteGraph" Version="5.0.2" />
+    <PackageReference Include="MessagePack" Version="3.1.4" />
+    <PackageReference Include="RocksDB" Version="10.4.2.64152" />
+    <PackageReference Include="Stellar.FastDB" Version="1.1.1" />
+    <PackageReference Include="ZoneTree" Version="1.8.6" />
+  </ItemGroup>
+
 </Project>

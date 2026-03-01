@@ -13,3 +13,5 @@
 ## Uses <https://github.com/litegraphdb/litegraph> for auth
 
 ## Support multiple databases with a master / primary database
+
+## For data model: Document, CatalogItem and Catalog
