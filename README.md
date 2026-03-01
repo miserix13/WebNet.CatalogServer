@@ -35,3 +35,5 @@ dotnet run -- server 7071
 ```powershell
 dotnet run -- client 127.0.0.1 7070
 ```
+
+The smoke-test client now includes an internal `SelfCheck` management command that reports storage invariant issues.

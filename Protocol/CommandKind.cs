@@ -13,5 +13,6 @@ public enum CommandKind
     GetDocument = 21,
     DeleteDocument = 22,
     Health = 100,
-    Metrics = 101
+    Metrics = 101,
+    SelfCheck = 102
 }

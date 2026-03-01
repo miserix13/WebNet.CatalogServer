@@ -259,6 +259,59 @@
             }
         }
 
+        public SelfCheckResponse RunSelfCheck()
+        {
+            lock (this.sync)
+            {
+                var issues = new List<SelfCheckIssue>();
+
+                if (this.databases.Count == 0)
+                {
+                    return new SelfCheckResponse(true, 0, []);
+                }
+
+                if (string.IsNullOrWhiteSpace(this.primaryDatabaseName))
+                {
+                    issues.Add(new SelfCheckIssue("storage.primary.missing", "Primary database pointer is not set while databases exist."));
+                }
+                else if (!this.databases.ContainsKey(this.primaryDatabaseName))
+                {
+                    issues.Add(new SelfCheckIssue("storage.primary.invalid", $"Primary database '{this.primaryDatabaseName}' does not exist."));
+                }
+
+                var primaryCount = this.databases.Values.Count(state => state.Metadata.IsPrimary);
+                if (primaryCount != 1)
+                {
+                    issues.Add(new SelfCheckIssue("storage.primary.count", $"Expected exactly one primary database, found {primaryCount}."));
+                }
+
+                foreach (var (databaseName, state) in this.databases)
+                {
+                    foreach (var catalogName in state.Catalogs.Keys)
+                    {
+                        if (!state.DocumentsByCatalog.ContainsKey(catalogName))
+                        {
+                            issues.Add(new SelfCheckIssue(
+                                "storage.catalog.documents.missing",
+                                $"Catalog '{catalogName}' in database '{databaseName}' has no document map."));
+                        }
+                    }
+
+                    foreach (var catalogName in state.DocumentsByCatalog.Keys)
+                    {
+                        if (!state.Catalogs.ContainsKey(catalogName))
+                        {
+                            issues.Add(new SelfCheckIssue(
+                                "storage.catalog.documents.orphaned",
+                                $"Document map for catalog '{catalogName}' in database '{databaseName}' is orphaned."));
+                        }
+                    }
+                }
+
+                return new SelfCheckResponse(issues.Count == 0, issues.Count, issues);
+            }
+        }
+
         private bool TryGetCatalog(string databaseName, string catalogName, out Dictionary<Guid, Document>? documentMap, out OperationError? error)
         {
             documentMap = null;

@@ -59,6 +59,17 @@ public record HealthResponse(
 [MessagePackObject]
 public record MetricsResponse([property: Key(0)] IReadOnlyDictionary<string, double> Values);
 
+[MessagePackObject]
+public record SelfCheckIssue(
+    [property: Key(0)] string Code,
+    [property: Key(1)] string Message);
+
+[MessagePackObject]
+public record SelfCheckResponse(
+    [property: Key(0)] bool IsHealthy,
+    [property: Key(1)] int IssueCount,
+    [property: Key(2)] IReadOnlyCollection<SelfCheckIssue> Issues);
+
 public readonly record struct StorageStatistics(
     int DatabaseCount,
     int CatalogCount,

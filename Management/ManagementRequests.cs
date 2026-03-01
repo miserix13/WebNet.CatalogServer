@@ -50,3 +50,6 @@ public record HealthRequest;
 
 [MessagePackObject]
 public record MetricsRequest;
+
+[MessagePackObject]
+public record SelfCheckRequest;

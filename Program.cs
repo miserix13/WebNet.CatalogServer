@@ -116,6 +116,26 @@ internal static class Program
         var deleteDocumentResponse = await SendAsync(stream, deleteDocumentRequest);
         Console.WriteLine($"DeleteDocument => success={deleteDocumentResponse.IsSuccess}, error={deleteDocumentResponse.ErrorCode}");
 
+        var selfCheckRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.SelfCheck,
+            new SelfCheckRequest());
+
+        var selfCheckResponse = await SendAsync(stream, selfCheckRequest);
+        if (selfCheckResponse.IsSuccess)
+        {
+            var selfCheckPayload = MessagePackSerializer.Deserialize<SelfCheckResponse>(selfCheckResponse.Payload);
+            Console.WriteLine($"SelfCheck => healthy={selfCheckPayload.IsHealthy}, issues={selfCheckPayload.IssueCount}");
+            foreach (var issue in selfCheckPayload.Issues)
+            {
+                Console.WriteLine($"   ! {issue.Code}: {issue.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"SelfCheck => success=False, error={selfCheckResponse.ErrorCode}");
+        }
+
         var listDbRequest = RequestEnvelope.FromPayload(
             Guid.NewGuid(),
             CommandKind.ListDatabases,

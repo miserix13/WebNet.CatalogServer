@@ -77,6 +77,7 @@ namespace WebNet.CatalogServer
                 CommandKind.DeleteDocument => await this.HandleDeleteDocumentAsync(request, cancellationToken),
                 CommandKind.Health => await this.HandleHealthAsync(request, cancellationToken),
                 CommandKind.Metrics => await this.HandleMetricsAsync(request, cancellationToken),
+                CommandKind.SelfCheck => await this.HandleSelfCheckAsync(request, cancellationToken),
                 _ => ResponseEnvelope.Error(request.RequestId, "command.unsupported", $"Unsupported command '{request.Command}'.")
             };
         }
@@ -189,6 +190,13 @@ namespace WebNet.CatalogServer
                     ["documents.total"] = stats.DocumentCount
                 });
 
+            return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
+        }
+
+        private Task<ResponseEnvelope> HandleSelfCheckAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            _ = MessagePackSerializer.Deserialize<SelfCheckRequest>(request.Payload);
+            var response = this.storage.RunSelfCheck();
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
         }
     }
