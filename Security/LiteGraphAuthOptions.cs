@@ -6,7 +6,9 @@ public sealed record LiteGraphAuthOptions(
     string BootstrapCredentialName,
     string BootstrapBearerToken,
     IReadOnlyCollection<string> AllowedCertificateThumbprints,
-    IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> CommandRolePolicy)
+    IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> CommandRolePolicy,
+    bool RequireFullCommandPolicy = false,
+    int OverrideMappedCommandCount = 0)
 {
     public sealed class AuthConfigurationException : Exception
     {
@@ -40,7 +42,7 @@ public sealed record LiteGraphAuthOptions(
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        var commandRolePolicy = ResolveCommandRolePolicy();
+        var policyResolution = ResolveCommandRolePolicy();
 
         return new LiteGraphAuthOptions(
             Path.GetFullPath(authDbPath),
@@ -48,16 +50,25 @@ public sealed record LiteGraphAuthOptions(
             bootstrapCredentialName,
             bootstrapBearerToken,
             thumbprints,
-            commandRolePolicy);
+            policyResolution.Policy,
+            policyResolution.RequireFullPolicy,
+            policyResolution.OverrideMappedCommandCount);
     }
 
-    private static IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> ResolveCommandRolePolicy()
+    private static CommandRolePolicyResolution ResolveCommandRolePolicy()
     {
         var defaults = BuildDefaultCommandRolePolicy();
         var overrideRaw = Environment.GetEnvironmentVariable("WEBNET_AUTH_COMMAND_ROLE_POLICY");
         if (string.IsNullOrWhiteSpace(overrideRaw))
         {
-            return defaults;
+            var strictWithoutOverride = ParseBoolEnvironment("WEBNET_AUTH_REQUIRE_FULL_COMMAND_POLICY", false);
+            if (strictWithoutOverride)
+            {
+                throw new AuthConfigurationException(
+                    "WEBNET_AUTH_REQUIRE_FULL_COMMAND_POLICY=true requires WEBNET_AUTH_COMMAND_ROLE_POLICY to be provided.");
+            }
+
+            return new CommandRolePolicyResolution(defaults, RequireFullPolicy: false, OverrideMappedCommandCount: 0);
         }
 
         var policy = defaults.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, EqualityComparer<CommandKind>.Default);
@@ -115,8 +126,13 @@ public sealed record LiteGraphAuthOptions(
             }
         }
 
-        return policy;
+        return new CommandRolePolicyResolution(policy, requireFullPolicy, mappedInOverride.Count);
     }
+
+    private readonly record struct CommandRolePolicyResolution(
+        IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> Policy,
+        bool RequireFullPolicy,
+        int OverrideMappedCommandCount);
 
     private static IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> BuildDefaultCommandRolePolicy()
     {

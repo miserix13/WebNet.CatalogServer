@@ -59,7 +59,7 @@ internal static class Program
         var isHealthy = combinedIssues.Length == 0;
 
         Console.WriteLine($"Storage roots => data='{layout.DataRoot}', zonetree='{layout.ZoneTreeRoot}', fastdb='{layout.FastDbRoot}', rocksdb='{layout.RocksDbRoot}', snapshot='{layout.SnapshotFilePath}'");
-        Console.WriteLine($"Auth => litegraph='{authOptions.DatabaseFilePath}', bootstrap={authOptions.BootstrapCredentialEnabled}, cert-allowlist={authOptions.AllowedCertificateThumbprints.Count}");
+        Console.WriteLine($"Auth => litegraph='{authOptions.DatabaseFilePath}', bootstrap={authOptions.BootstrapCredentialEnabled}, cert-allowlist={authOptions.AllowedCertificateThumbprints.Count}, strict-policy={authOptions.RequireFullCommandPolicy}, override-mapped-commands={authOptions.OverrideMappedCommandCount}");
         Console.WriteLine($"Startup SelfCheck => healthy={isHealthy}, issues={combinedIssues.Length}");
         foreach (var issue in combinedIssues)
         {
