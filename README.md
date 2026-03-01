@@ -45,6 +45,11 @@
 - Client certificate thumbprints are validated against allowlist:
   - env: `WEBNET_ALLOWED_CERT_THUMBPRINTS` (comma/semicolon separated)
   - default includes `dev-thumbprint` for local smoke tests
+- Command authorization uses explicit command->role policy:
+  - default policy: readers for read/health commands, writers for read+write commands, admins for all configured commands
+  - override env: `WEBNET_AUTH_COMMAND_ROLE_POLICY`
+  - format: `CommandKind=role1,role2;CommandKind=role3`
+  - example: `GetDocument=admin,reader;PutDocument=admin,writer;SelfCheck=admin`
 
 ## Run
 

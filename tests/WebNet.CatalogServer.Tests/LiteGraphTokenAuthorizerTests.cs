@@ -9,7 +9,7 @@ public sealed class LiteGraphTokenAuthorizerTests
     public void Authorize_BootstrapAdmin_AllowsAllCommands()
     {
         var path = NewAuthDbPath();
-        var options = new LiteGraphAuthOptions(path, true, "admin", "token-admin", ["dev-thumbprint"]);
+        var options = NewOptions(path, "admin", "token-admin");
 
         using var authorizer = new LiteGraphTokenAuthorizer(options);
 
@@ -21,7 +21,7 @@ public sealed class LiteGraphTokenAuthorizerTests
     public void Authorize_ReaderRole_DeniesWriteCommands()
     {
         var path = NewAuthDbPath();
-        var options = new LiteGraphAuthOptions(path, true, "reader", "token-reader", ["dev-thumbprint"]);
+        var options = NewOptions(path, "reader", "token-reader");
 
         using var authorizer = new LiteGraphTokenAuthorizer(options);
 
@@ -35,7 +35,7 @@ public sealed class LiteGraphTokenAuthorizerTests
     public async Task Authorize_InactiveCredential_DeniesAccess()
     {
         var path = NewAuthDbPath();
-        var options = new LiteGraphAuthOptions(path, true, "admin", "token-inactive", ["dev-thumbprint"]);
+        var options = NewOptions(path, "admin", "token-inactive");
 
         using (var authorizer = new LiteGraphTokenAuthorizer(options))
         {
@@ -54,10 +54,62 @@ public sealed class LiteGraphTokenAuthorizerTests
         Assert.False(reloaded.Authorize("token-inactive", CommandKind.Health));
     }
 
+    [Fact]
+    public void Authorize_CustomCommandPolicy_EnforcesOverrides()
+    {
+        var path = NewAuthDbPath();
+        var customPolicy = new Dictionary<CommandKind, IReadOnlyCollection<string>>
+        {
+            [CommandKind.GetDocument] = ["admin"],
+            [CommandKind.Health] = ["reader", "admin"]
+        };
+
+        var options = new LiteGraphAuthOptions(
+            path,
+            BootstrapCredentialEnabled: true,
+            BootstrapCredentialName: "reader",
+            BootstrapBearerToken: "token-custom",
+            AllowedCertificateThumbprints: ["dev-thumbprint"],
+            CommandRolePolicy: customPolicy);
+
+        using var authorizer = new LiteGraphTokenAuthorizer(options);
+
+        Assert.False(authorizer.Authorize("token-custom", CommandKind.GetDocument));
+        Assert.True(authorizer.Authorize("token-custom", CommandKind.Health));
+    }
+
     private static string NewAuthDbPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return Path.Combine(root, "auth", "litegraph-auth.db");
+    }
+
+    private static LiteGraphAuthOptions NewOptions(string dbPath, string credentialName, string token)
+    {
+        var policy = new Dictionary<CommandKind, IReadOnlyCollection<string>>
+        {
+            [CommandKind.CreateDatabase] = ["admin", "writer"],
+            [CommandKind.DropDatabase] = ["admin", "writer"],
+            [CommandKind.ListDatabases] = ["admin", "writer", "reader"],
+            [CommandKind.CreateCatalog] = ["admin", "writer"],
+            [CommandKind.DropCatalog] = ["admin", "writer"],
+            [CommandKind.ListCatalogs] = ["admin", "writer", "reader"],
+            [CommandKind.PutDocument] = ["admin", "writer"],
+            [CommandKind.GetDocument] = ["admin", "writer", "reader"],
+            [CommandKind.DeleteDocument] = ["admin", "writer"],
+            [CommandKind.Health] = ["admin", "writer", "reader"],
+            [CommandKind.Metrics] = ["admin", "writer", "reader"],
+            [CommandKind.SelfCheck] = ["admin", "writer", "reader"],
+            [CommandKind.MaintenanceDiagnostics] = ["admin", "writer", "reader"]
+        };
+
+        return new LiteGraphAuthOptions(
+            dbPath,
+            BootstrapCredentialEnabled: true,
+            BootstrapCredentialName: credentialName,
+            BootstrapBearerToken: token,
+            AllowedCertificateThumbprints: ["dev-thumbprint"],
+            CommandRolePolicy: policy);
     }
 }

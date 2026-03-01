@@ -5,28 +5,8 @@ namespace WebNet.CatalogServer;
 
 public sealed class LiteGraphTokenAuthorizer : ITokenAuthorizer, IDisposable
 {
-    private static readonly HashSet<CommandKind> ReadCommands =
-    [
-        CommandKind.GetDocument,
-        CommandKind.ListDatabases,
-        CommandKind.ListCatalogs,
-        CommandKind.Health,
-        CommandKind.Metrics,
-        CommandKind.SelfCheck,
-        CommandKind.MaintenanceDiagnostics
-    ];
-
-    private static readonly HashSet<CommandKind> WriteCommands =
-    [
-        CommandKind.CreateDatabase,
-        CommandKind.DropDatabase,
-        CommandKind.CreateCatalog,
-        CommandKind.DropCatalog,
-        CommandKind.PutDocument,
-        CommandKind.DeleteDocument
-    ];
-
     private readonly SqliteGraphRepository repository;
+    private readonly IReadOnlyDictionary<CommandKind, HashSet<string>> commandRolePolicy;
 
     public LiteGraphTokenAuthorizer(LiteGraphAuthOptions options)
     {
@@ -40,6 +20,10 @@ public sealed class LiteGraphTokenAuthorizer : ITokenAuthorizer, IDisposable
 
         this.repository = new SqliteGraphRepository(options.DatabaseFilePath, true);
         this.repository.InitializeRepository();
+        this.commandRolePolicy = options.CommandRolePolicy
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(role => role.ToLowerInvariant()).ToHashSet(StringComparer.Ordinal));
 
         if (options.BootstrapCredentialEnabled)
         {
@@ -90,7 +74,7 @@ public sealed class LiteGraphTokenAuthorizer : ITokenAuthorizer, IDisposable
             return false;
         }
 
-        return IsCommandAllowed(credential.Name, command);
+        return IsCommandAllowed(credential.Name, command, this.commandRolePolicy);
     }
 
     public void Dispose()
@@ -101,7 +85,10 @@ public sealed class LiteGraphTokenAuthorizer : ITokenAuthorizer, IDisposable
         }
     }
 
-    private static bool IsCommandAllowed(string? credentialName, CommandKind command)
+    private static bool IsCommandAllowed(
+        string? credentialName,
+        CommandKind command,
+        IReadOnlyDictionary<CommandKind, HashSet<string>> commandRolePolicy)
     {
         var roles = ParseRoles(credentialName);
         if (roles.Count == 0)
@@ -109,33 +96,12 @@ public sealed class LiteGraphTokenAuthorizer : ITokenAuthorizer, IDisposable
             return false;
         }
 
-        if (roles.Contains("admin", StringComparer.OrdinalIgnoreCase))
+        if (!commandRolePolicy.TryGetValue(command, out var allowedRoles) || allowedRoles.Count == 0)
         {
-            return true;
+            return false;
         }
 
-        if (roles.Contains(command.ToString(), StringComparer.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var allowRead = roles.Contains("reader", StringComparer.OrdinalIgnoreCase)
-            || roles.Contains("read", StringComparer.OrdinalIgnoreCase);
-
-        var allowWrite = roles.Contains("writer", StringComparer.OrdinalIgnoreCase)
-            || roles.Contains("write", StringComparer.OrdinalIgnoreCase);
-
-        if (allowRead && ReadCommands.Contains(command))
-        {
-            return true;
-        }
-
-        if (allowWrite && (WriteCommands.Contains(command) || ReadCommands.Contains(command)))
-        {
-            return true;
-        }
-
-        return false;
+        return roles.Any(role => allowedRoles.Contains(role));
     }
 
     private static HashSet<string> ParseRoles(string? credentialName)
