@@ -31,8 +31,9 @@ public sealed class LiteGraphTokenAuthorizer : ITokenAuthorizer, IDisposable
         }
     }
 
-    public bool Authorize(string token, CommandKind command)
+    public bool Authorize(SecurityContext securityContext, CommandKind command)
     {
+        var token = securityContext.Token;
         if (string.IsNullOrWhiteSpace(token))
         {
             return false;

@@ -1,10 +1,12 @@
 namespace WebNet.CatalogServer;
 
 public sealed record LiteGraphAuthOptions(
+    AuthProvider Provider,
     string DatabaseFilePath,
     bool BootstrapCredentialEnabled,
     string BootstrapCredentialName,
     string BootstrapBearerToken,
+    IReadOnlyCollection<string> AllowedWindowsSubjects,
     IReadOnlyCollection<string> AllowedCertificateThumbprints,
     IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> CommandRolePolicy,
     bool RequireFullCommandPolicy = false,
@@ -18,17 +20,25 @@ public sealed record LiteGraphAuthOptions(
         }
     }
 
-    public static LiteGraphAuthOptions Resolve(string? dataRoot = null)
+    public static LiteGraphAuthOptions Resolve(string? dataRoot = null, AuthProvider? providerOverride = null)
     {
         var root = string.IsNullOrWhiteSpace(dataRoot)
             ? StorageDirectoryLayout.Resolve().DataRoot
             : StorageDirectoryLayout.Resolve(dataRoot).DataRoot;
 
+        var provider = ResolveAuthProvider(providerOverride);
         var authDbPath = Environment.GetEnvironmentVariable("WEBNET_AUTH_DB_PATH");
         if (string.IsNullOrWhiteSpace(authDbPath))
         {
             authDbPath = Path.Combine(root, "auth", "litegraph-auth.db");
         }
+
+        var windowsAllowListRaw = ReadEnvironmentOrDefault("WEBNET_AUTH_WINDOWS_ALLOWED_SUBJECTS", string.Empty);
+        var allowedWindowsSubjects = windowsAllowListRaw
+            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var bootstrapEnabled = ParseBoolEnvironment("WEBNET_AUTH_BOOTSTRAP_ENABLED", true);
         var bootstrapCredentialName = ReadEnvironmentOrDefault("WEBNET_AUTH_BOOTSTRAP_CREDENTIAL_NAME", "admin");
@@ -45,14 +55,38 @@ public sealed record LiteGraphAuthOptions(
         var policyResolution = ResolveCommandRolePolicy();
 
         return new LiteGraphAuthOptions(
+            provider,
             Path.GetFullPath(authDbPath),
             bootstrapEnabled,
             bootstrapCredentialName,
             bootstrapBearerToken,
+            allowedWindowsSubjects,
             thumbprints,
             policyResolution.Policy,
             policyResolution.RequireFullPolicy,
             policyResolution.OverrideMappedCommandCount);
+    }
+
+    private static AuthProvider ResolveAuthProvider(AuthProvider? providerOverride)
+    {
+        if (providerOverride.HasValue)
+        {
+            return providerOverride.Value;
+        }
+
+        var raw = ReadEnvironmentOrDefault("WEBNET_AUTH_PROVIDER", "litegraph");
+        if (string.Equals(raw, "litegraph", StringComparison.OrdinalIgnoreCase))
+        {
+            return AuthProvider.LiteGraph;
+        }
+
+        if (string.Equals(raw, "windows", StringComparison.OrdinalIgnoreCase))
+        {
+            return AuthProvider.Windows;
+        }
+
+        throw new AuthConfigurationException(
+            $"Invalid WEBNET_AUTH_PROVIDER value '{raw}'. Supported values are 'litegraph' and 'windows'.");
     }
 
     private static CommandRolePolicyResolution ResolveCommandRolePolicy()

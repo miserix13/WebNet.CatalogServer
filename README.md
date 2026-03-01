@@ -36,12 +36,18 @@
 
 ## Security
 
-- Runtime auth now uses LiteGraph SQLite-backed credentials (no allow-all runtime path).
+- Runtime auth provider is configurable via `WEBNET_AUTH_PROVIDER`:
+  - `litegraph` (default): LiteGraph SQLite-backed credentials
+  - `windows`: caller `Subject` + `Roles` are authorized against command-role policy
 - Default auth DB path: `./data/auth/litegraph-auth.db` (override with `WEBNET_AUTH_DB_PATH`).
 - Default bootstrap credential is created if missing:
   - token: `dev-token` (override `WEBNET_AUTH_BOOTSTRAP_BEARER_TOKEN`)
   - role/name: `admin` (override `WEBNET_AUTH_BOOTSTRAP_CREDENTIAL_NAME`)
   - bootstrap enabled by default (`WEBNET_AUTH_BOOTSTRAP_ENABLED=true|false`)
+- Optional Windows subject allowlist (`windows` mode only):
+  - env: `WEBNET_AUTH_WINDOWS_ALLOWED_SUBJECTS`
+  - format: comma/semicolon separated values (example: `CORP\\alice;CORP\\catalog-admins`)
+  - when empty, any non-empty `Subject` is eligible and command access is controlled by roles/policy
 - Client certificate thumbprints are validated against allowlist:
   - env: `WEBNET_ALLOWED_CERT_THUMBPRINTS` (comma/semicolon separated)
   - default includes `dev-thumbprint` for local smoke tests
@@ -84,6 +90,12 @@ dotnet run -- server --fail-on-self-check
 
 ```powershell
 dotnet run -- server 7071 --fail-on-self-check
+```
+
+- Start server using Windows auth provider (CLI override):
+
+```powershell
+dotnet run -- server --auth-provider windows
 ```
 
 - Run internal self-check only (no TCP listener):

@@ -59,9 +59,9 @@ namespace WebNet.CatalogServer
                 return ResponseEnvelope.Error(request.RequestId, "auth.invalid_certificate", "Invalid client certificate.");
             }
 
-            if (!this.tokenAuthorizer.Authorize(securityContext.Token, request.Command))
+            if (!this.tokenAuthorizer.Authorize(securityContext, request.Command))
             {
-                return ResponseEnvelope.Error(request.RequestId, "auth.forbidden", "Token does not have required scope.");
+                return ResponseEnvelope.Error(request.RequestId, "auth.forbidden", "Caller is not authorized for this command.");
             }
 
             return request.Command switch

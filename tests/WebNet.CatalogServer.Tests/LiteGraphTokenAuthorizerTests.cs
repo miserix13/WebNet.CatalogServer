@@ -12,9 +12,10 @@ public sealed class LiteGraphTokenAuthorizerTests
         var options = NewOptions(path, "admin", "token-admin");
 
         using var authorizer = new LiteGraphTokenAuthorizer(options);
+        var security = new SecurityContext("token-admin", "dev-thumbprint", "dev-user", ["admin"]);
 
-        Assert.True(authorizer.Authorize("token-admin", CommandKind.CreateDatabase));
-        Assert.True(authorizer.Authorize("token-admin", CommandKind.MaintenanceDiagnostics));
+        Assert.True(authorizer.Authorize(security, CommandKind.CreateDatabase));
+        Assert.True(authorizer.Authorize(security, CommandKind.MaintenanceDiagnostics));
     }
 
     [Fact]
@@ -24,11 +25,12 @@ public sealed class LiteGraphTokenAuthorizerTests
         var options = NewOptions(path, "reader", "token-reader");
 
         using var authorizer = new LiteGraphTokenAuthorizer(options);
+        var security = new SecurityContext("token-reader", "dev-thumbprint", "dev-user", ["reader"]);
 
-        Assert.True(authorizer.Authorize("token-reader", CommandKind.GetDocument));
-        Assert.True(authorizer.Authorize("token-reader", CommandKind.SelfCheck));
-        Assert.False(authorizer.Authorize("token-reader", CommandKind.PutDocument));
-        Assert.False(authorizer.Authorize("token-reader", CommandKind.CreateCatalog));
+        Assert.True(authorizer.Authorize(security, CommandKind.GetDocument));
+        Assert.True(authorizer.Authorize(security, CommandKind.SelfCheck));
+        Assert.False(authorizer.Authorize(security, CommandKind.PutDocument));
+        Assert.False(authorizer.Authorize(security, CommandKind.CreateCatalog));
     }
 
     [Fact]
@@ -36,10 +38,11 @@ public sealed class LiteGraphTokenAuthorizerTests
     {
         var path = NewAuthDbPath();
         var options = NewOptions(path, "admin", "token-inactive");
+        var security = new SecurityContext("token-inactive", "dev-thumbprint", "dev-user", ["admin"]);
 
         using (var authorizer = new LiteGraphTokenAuthorizer(options))
         {
-            Assert.True(authorizer.Authorize("token-inactive", CommandKind.Health));
+            Assert.True(authorizer.Authorize(security, CommandKind.Health));
         }
 
         var repository = new SqliteGraphRepository(path, true);
@@ -51,7 +54,7 @@ public sealed class LiteGraphTokenAuthorizerTests
         _ = await repository.Credential.Update(credential, CancellationToken.None);
 
         using var reloaded = new LiteGraphTokenAuthorizer(options);
-        Assert.False(reloaded.Authorize("token-inactive", CommandKind.Health));
+        Assert.False(reloaded.Authorize(security, CommandKind.Health));
     }
 
     [Fact]
@@ -65,17 +68,20 @@ public sealed class LiteGraphTokenAuthorizerTests
         };
 
         var options = new LiteGraphAuthOptions(
+            Provider: AuthProvider.LiteGraph,
             path,
             BootstrapCredentialEnabled: true,
             BootstrapCredentialName: "reader",
             BootstrapBearerToken: "token-custom",
+            AllowedWindowsSubjects: [],
             AllowedCertificateThumbprints: ["dev-thumbprint"],
             CommandRolePolicy: customPolicy);
 
         using var authorizer = new LiteGraphTokenAuthorizer(options);
+        var security = new SecurityContext("token-custom", "dev-thumbprint", "dev-user", ["reader"]);
 
-        Assert.False(authorizer.Authorize("token-custom", CommandKind.GetDocument));
-        Assert.True(authorizer.Authorize("token-custom", CommandKind.Health));
+        Assert.False(authorizer.Authorize(security, CommandKind.GetDocument));
+        Assert.True(authorizer.Authorize(security, CommandKind.Health));
     }
 
     private static string NewAuthDbPath()
@@ -105,10 +111,12 @@ public sealed class LiteGraphTokenAuthorizerTests
         };
 
         return new LiteGraphAuthOptions(
+            Provider: AuthProvider.LiteGraph,
             dbPath,
             BootstrapCredentialEnabled: true,
             BootstrapCredentialName: credentialName,
             BootstrapBearerToken: token,
+            AllowedWindowsSubjects: [],
             AllowedCertificateThumbprints: ["dev-thumbprint"],
             CommandRolePolicy: policy);
     }

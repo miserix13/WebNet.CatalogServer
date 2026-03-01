@@ -27,10 +27,10 @@ internal static class Program
             return;
         }
 
-        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly, options.DataRoot);
+        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly, options.DataRoot, options.AuthProviderOverride);
     }
 
-    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot)
+    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride)
     {
         var layout = StorageDirectoryLayout.Resolve(dataRoot);
         var fileSystemCheck = StorageFilesystemValidator.EnsureAndValidate(layout);
@@ -38,7 +38,7 @@ internal static class Program
         LiteGraphAuthOptions authOptions;
         try
         {
-            authOptions = LiteGraphAuthOptions.Resolve(layout.DataRoot);
+            authOptions = LiteGraphAuthOptions.Resolve(layout.DataRoot, authProviderOverride);
         }
         catch (LiteGraphAuthOptions.AuthConfigurationException ex)
         {
@@ -47,7 +47,7 @@ internal static class Program
             return;
         }
 
-        using var tokenAuthorizer = new LiteGraphTokenAuthorizer(authOptions);
+        var tokenAuthorizer = CreateTokenAuthorizer(authOptions);
         var certificateValidator = new ThumbprintAllowListClientCertificateValidator(authOptions.AllowedCertificateThumbprints);
         var server = new Server(
             storage,
@@ -59,7 +59,7 @@ internal static class Program
         var isHealthy = combinedIssues.Length == 0;
 
         Console.WriteLine($"Storage roots => data='{layout.DataRoot}', zonetree='{layout.ZoneTreeRoot}', fastdb='{layout.FastDbRoot}', rocksdb='{layout.RocksDbRoot}', snapshot='{layout.SnapshotFilePath}'");
-        Console.WriteLine($"Auth => litegraph='{authOptions.DatabaseFilePath}', bootstrap={authOptions.BootstrapCredentialEnabled}, cert-allowlist={authOptions.AllowedCertificateThumbprints.Count}, strict-policy={authOptions.RequireFullCommandPolicy}, override-mapped-commands={authOptions.OverrideMappedCommandCount}");
+        Console.WriteLine($"Auth => provider={authOptions.Provider}, litegraph='{authOptions.DatabaseFilePath}', bootstrap={authOptions.BootstrapCredentialEnabled}, windows-allowlist={authOptions.AllowedWindowsSubjects.Count}, cert-allowlist={authOptions.AllowedCertificateThumbprints.Count}, strict-policy={authOptions.RequireFullCommandPolicy}, override-mapped-commands={authOptions.OverrideMappedCommandCount}");
         Console.WriteLine($"Startup SelfCheck => healthy={isHealthy}, issues={combinedIssues.Length}");
         foreach (var issue in combinedIssues)
         {
@@ -79,23 +79,43 @@ internal static class Program
             return;
         }
 
-        server.Start();
-        await using var host = server.CreateTcpHost(TcpServerOptions.Default with { Port = port });
-        await host.StartAsync();
-
-        Console.WriteLine($"WebNet.CatalogServer listening on tcp://0.0.0.0:{port}");
-        Console.WriteLine("Press Ctrl+C to stop.");
-
-        var shutdown = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Console.CancelKeyPress += (_, e) =>
+        try
         {
-            e.Cancel = true;
-            shutdown.TrySetResult(true);
-        };
+            server.Start();
+            await using var host = server.CreateTcpHost(TcpServerOptions.Default with { Port = port });
+            await host.StartAsync();
 
-        await shutdown.Task;
-        server.Stop();
-        await host.StopAsync();
+            Console.WriteLine($"WebNet.CatalogServer listening on tcp://0.0.0.0:{port}");
+            Console.WriteLine("Press Ctrl+C to stop.");
+
+            var shutdown = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                shutdown.TrySetResult(true);
+            };
+
+            await shutdown.Task;
+            server.Stop();
+            await host.StopAsync();
+        }
+        finally
+        {
+            if (tokenAuthorizer is IDisposable disposableAuthorizer)
+            {
+                disposableAuthorizer.Dispose();
+            }
+        }
+    }
+
+    private static ITokenAuthorizer CreateTokenAuthorizer(LiteGraphAuthOptions authOptions)
+    {
+        return authOptions.Provider switch
+        {
+            AuthProvider.LiteGraph => new LiteGraphTokenAuthorizer(authOptions),
+            AuthProvider.Windows => new WindowsTokenAuthorizer(authOptions),
+            _ => throw new InvalidOperationException($"Unsupported auth provider '{authOptions.Provider}'.")
+        };
     }
 
     private static async Task RunClientSmokeTestAsync(string hostName, int port)
@@ -270,6 +290,7 @@ internal static class Program
         var failOnSelfCheck = false;
         var selfCheckOnly = false;
         string? dataRoot = null;
+        AuthProvider? authProviderOverride = null;
         var positional = new List<string>();
 
         for (var i = index; i < args.Length; i++)
@@ -322,6 +343,32 @@ internal static class Program
                     continue;
                 }
 
+                if (token.StartsWith("--auth-provider", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mode != "server")
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        error = "--auth-provider is only valid in server mode.";
+                        return false;
+                    }
+
+                    if (!TryReadAuthProviderValue(args, ref i, token, out var providerValue, out error))
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        return false;
+                    }
+
+                    if (!TryParseAuthProvider(providerValue, out var parsedProvider))
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        error = $"Invalid auth provider '{providerValue}'. Expected 'litegraph' or 'windows'.";
+                        return false;
+                    }
+
+                    authProviderOverride = parsedProvider;
+                    continue;
+                }
+
                 options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
                 error = $"Unknown flag '{token}'.";
                 return false;
@@ -347,7 +394,7 @@ internal static class Program
                 return false;
             }
 
-            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly, dataRoot);
+            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly, dataRoot, authProviderOverride);
             error = string.Empty;
             return true;
         }
@@ -419,12 +466,64 @@ internal static class Program
         return true;
     }
 
+    private static bool TryReadAuthProviderValue(string[] args, ref int index, string token, out string value, out string error)
+    {
+        const string prefix = "--auth-provider=";
+        if (token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            value = token[prefix.Length..].Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                error = "--auth-provider requires a non-empty value.";
+                return false;
+            }
+
+            error = string.Empty;
+            return true;
+        }
+
+        if (index + 1 >= args.Length)
+        {
+            value = string.Empty;
+            error = "--auth-provider requires a value.";
+            return false;
+        }
+
+        value = args[++index].Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            error = "--auth-provider requires a non-empty value.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryParseAuthProvider(string value, out AuthProvider provider)
+    {
+        if (string.Equals(value, "litegraph", StringComparison.OrdinalIgnoreCase))
+        {
+            provider = AuthProvider.LiteGraph;
+            return true;
+        }
+
+        if (string.Equals(value, "windows", StringComparison.OrdinalIgnoreCase))
+        {
+            provider = AuthProvider.Windows;
+            return true;
+        }
+
+        provider = default;
+        return false;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("WebNet.CatalogServer");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only] [--data-root <path>]");
+        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only] [--data-root <path>] [--auth-provider <litegraph|windows>]");
         Console.WriteLine("  dotnet run -- client [host] [port]");
         Console.WriteLine("  dotnet run -- --help");
         Console.WriteLine();
@@ -436,6 +535,10 @@ internal static class Program
         Console.WriteLine("  --fail-on-self-check  Abort server startup when self-check is unhealthy.");
         Console.WriteLine("  --self-check-only     Run self-check and exit without starting listener.");
         Console.WriteLine("  --data-root <path>    Override storage root (also via WEBNET_DATA_ROOT).\n                        Layout: kv/zonetree, kv/fastdb, kv/rocksdb, snapshots/.");
+        Console.WriteLine("  --auth-provider <v>   Override runtime auth provider: 'litegraph' or 'windows'.");
+        Console.WriteLine("Environment auth options:");
+        Console.WriteLine("  WEBNET_AUTH_PROVIDER                  'litegraph' (default) or 'windows'.");
+        Console.WriteLine("  WEBNET_AUTH_WINDOWS_ALLOWED_SUBJECTS  Optional CSV/semicolon allow-list for Windows mode.");
         Console.WriteLine("  --help, -h, /?        Show this help text.");
     }
 
@@ -447,11 +550,12 @@ internal sealed record CliOptions(
     string? HostName,
     bool FailOnSelfCheck,
     bool SelfCheckOnly,
-    string? DataRoot)
+    string? DataRoot,
+    AuthProvider? AuthProviderOverride)
 {
-    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot) =>
-        new("server", port, null, failOnSelfCheck, selfCheckOnly, dataRoot);
+    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot, AuthProvider? authProviderOverride = null) =>
+        new("server", port, null, failOnSelfCheck, selfCheckOnly, dataRoot, authProviderOverride);
 
     public static CliOptions Client(string hostName, int port) =>
-        new("client", port, hostName, false, false, null);
+        new("client", port, hostName, false, false, null, null);
 }

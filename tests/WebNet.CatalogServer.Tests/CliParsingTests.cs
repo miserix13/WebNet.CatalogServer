@@ -16,6 +16,7 @@ public class CliParsingTests
         Assert.False(options.FailOnSelfCheck);
         Assert.False(options.SelfCheckOnly);
         Assert.Null(options.DataRoot);
+        Assert.Null(options.AuthProviderOverride);
     }
 
     [Fact]
@@ -30,6 +31,7 @@ public class CliParsingTests
         Assert.True(options.FailOnSelfCheck);
         Assert.True(options.SelfCheckOnly);
         Assert.Null(options.DataRoot);
+        Assert.Null(options.AuthProviderOverride);
     }
 
     [Fact]
@@ -43,6 +45,7 @@ public class CliParsingTests
         Assert.Equal("127.0.0.1", options.HostName);
         Assert.Equal(7070, options.Port);
         Assert.Null(options.DataRoot);
+        Assert.Null(options.AuthProviderOverride);
     }
 
     [Fact]
@@ -105,6 +108,53 @@ public class CliParsingTests
     public void TryParseOptions_ClientDataRoot_Fails()
     {
         var result = Program.TryParseOptions(["client", "--data-root", "C:\\catalog-data"], out _, out var error);
+
+        Assert.False(result);
+        Assert.Contains("only valid in server mode", error);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerAuthProviderWithEquals_ParsesSuccessfully()
+    {
+        var result = Program.TryParseOptions(["server", "--auth-provider=windows"], out var options, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal(AuthProvider.Windows, options.AuthProviderOverride);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerAuthProviderWithSeparatedValue_ParsesSuccessfully()
+    {
+        var result = Program.TryParseOptions(["server", "--auth-provider", "litegraph"], out var options, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal(AuthProvider.LiteGraph, options.AuthProviderOverride);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerAuthProviderWithoutValue_Fails()
+    {
+        var result = Program.TryParseOptions(["server", "--auth-provider"], out _, out var error);
+
+        Assert.False(result);
+        Assert.Contains("requires a value", error);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerAuthProviderInvalidValue_Fails()
+    {
+        var result = Program.TryParseOptions(["server", "--auth-provider", "bad"], out _, out var error);
+
+        Assert.False(result);
+        Assert.Contains("Invalid auth provider", error);
+    }
+
+    [Fact]
+    public void TryParseOptions_ClientAuthProvider_Fails()
+    {
+        var result = Program.TryParseOptions(["client", "--auth-provider", "windows"], out _, out var error);
 
         Assert.False(result);
         Assert.Contains("only valid in server mode", error);
