@@ -15,3 +15,23 @@
 ## Support multiple databases with a master / primary database
 
 ## For data model: Document, CatalogItem and Catalog
+
+## Run
+
+- Start server (default port 7070):
+
+```powershell
+dotnet run -- server
+```
+
+- Start server on custom port:
+
+```powershell
+dotnet run -- server 7071
+```
+
+- Run TCP smoke-test client against local server:
+
+```powershell
+dotnet run -- client 127.0.0.1 7070
+```
