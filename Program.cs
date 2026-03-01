@@ -13,23 +13,25 @@ internal static class Program
             return;
         }
 
-        var mode = args.Length > 0 ? args[0].Trim().ToLowerInvariant() : "server";
-
-        if (mode == "client")
+        if (!TryParseOptions(args, out var options, out var error))
         {
-            await RunClientSmokeTestAsync(args);
+            Console.Error.WriteLine($"Argument error: {error}");
+            Console.Error.WriteLine("Run 'dotnet run -- --help' for usage.");
+            Environment.ExitCode = 64;
             return;
         }
 
-        await RunServerAsync(args);
+        if (options.Mode == "client")
+        {
+            await RunClientSmokeTestAsync(options.HostName!, options.Port);
+            return;
+        }
+
+        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly);
     }
 
-    private static async Task RunServerAsync(string[] args)
+    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly)
     {
-        var port = TryReadPort(args, defaultPort: 7070);
-        var failOnSelfCheck = HasFlag(args, "--fail-on-self-check");
-        var selfCheckOnly = HasFlag(args, "--self-check-only");
-
         var storage = new Storage();
         var server = new Server(
             storage,
@@ -75,11 +77,8 @@ internal static class Program
         await host.StopAsync();
     }
 
-    private static async Task RunClientSmokeTestAsync(string[] args)
+    private static async Task RunClientSmokeTestAsync(string hostName, int port)
     {
-        var hostName = args.Length > 1 ? args[1] : "127.0.0.1";
-        var port = TryReadPort(args, defaultPort: 7070);
-
         using var client = new TcpClient();
         await client.ConnectAsync(hostName, port);
         using var stream = client.GetStream();
@@ -206,19 +205,127 @@ internal static class Program
         return wireResponse.Response;
     }
 
-    private static int TryReadPort(string[] args, int defaultPort)
-    {
-        if (args.Length > 1 && int.TryParse(args[^1], out var parsed) && parsed is > 0 and <= 65535)
-        {
-            return parsed;
-        }
-
-        return defaultPort;
-    }
-
     private static bool HasFlag(string[] args, string flag)
     {
         return args.Any(arg => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static bool TryParseOptions(string[] args, out CliOptions options, out string error)
+    {
+        const int defaultPort = 7070;
+
+        var index = 0;
+        var mode = "server";
+
+        if (args.Length > 0 && !args[0].StartsWith('-') && args[0] != "/?")
+        {
+            mode = args[0].Trim().ToLowerInvariant();
+            index = 1;
+        }
+
+        if (mode != "server" && mode != "client")
+        {
+            options = CliOptions.Server(defaultPort, failOnSelfCheck: false, selfCheckOnly: false);
+            error = $"Unknown mode '{mode}'.";
+            return false;
+        }
+
+        var failOnSelfCheck = false;
+        var selfCheckOnly = false;
+        var positional = new List<string>();
+
+        for (var i = index; i < args.Length; i++)
+        {
+            var token = args[i].Trim();
+            if (token.StartsWith('-'))
+            {
+                if (string.Equals(token, "--fail-on-self-check", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mode != "server")
+                    {
+                        options = CliOptions.Server(defaultPort, false, false);
+                        error = "--fail-on-self-check is only valid in server mode.";
+                        return false;
+                    }
+
+                    failOnSelfCheck = true;
+                    continue;
+                }
+
+                if (string.Equals(token, "--self-check-only", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mode != "server")
+                    {
+                        options = CliOptions.Server(defaultPort, false, false);
+                        error = "--self-check-only is only valid in server mode.";
+                        return false;
+                    }
+
+                    selfCheckOnly = true;
+                    continue;
+                }
+
+                options = CliOptions.Server(defaultPort, false, false);
+                error = $"Unknown flag '{token}'.";
+                return false;
+            }
+
+            positional.Add(token);
+        }
+
+        if (mode == "server")
+        {
+            if (positional.Count > 1)
+            {
+                options = CliOptions.Server(defaultPort, false, false);
+                error = "Server mode accepts at most one positional argument: [port].";
+                return false;
+            }
+
+            var port = defaultPort;
+            if (positional.Count == 1 && !TryParsePort(positional[0], out port))
+            {
+                options = CliOptions.Server(defaultPort, false, false);
+                error = $"Invalid server port '{positional[0]}'. Expected integer in range 1-65535.";
+                return false;
+            }
+
+            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly);
+            error = string.Empty;
+            return true;
+        }
+
+        if (positional.Count > 2)
+        {
+            options = CliOptions.Client("127.0.0.1", defaultPort);
+            error = "Client mode accepts [host] [port].";
+            return false;
+        }
+
+        var hostName = positional.Count >= 1 ? positional[0] : "127.0.0.1";
+        var clientPort = defaultPort;
+        if (positional.Count == 2 && !TryParsePort(positional[1], out clientPort))
+        {
+            options = CliOptions.Client("127.0.0.1", defaultPort);
+            error = $"Invalid client port '{positional[1]}'. Expected integer in range 1-65535.";
+            return false;
+        }
+
+        options = CliOptions.Client(hostName, clientPort);
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryParsePort(string value, out int port)
+    {
+        if (int.TryParse(value, out var parsed) && parsed is > 0 and <= 65535)
+        {
+            port = parsed;
+            return true;
+        }
+
+        port = 0;
+        return false;
     }
 
     private static void PrintHelp()
@@ -239,4 +346,19 @@ internal static class Program
         Console.WriteLine("  --self-check-only     Run self-check and exit without starting listener.");
         Console.WriteLine("  --help, -h, /?        Show this help text.");
     }
+
+}
+
+internal sealed record CliOptions(
+    string Mode,
+    int Port,
+    string? HostName,
+    bool FailOnSelfCheck,
+    bool SelfCheckOnly)
+{
+    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly) =>
+        new("server", port, null, failOnSelfCheck, selfCheckOnly);
+
+    public static CliOptions Client(string hostName, int port) =>
+        new("client", port, hostName, false, false);
 }

@@ -54,6 +54,14 @@ dotnet run -- server --self-check-only
 dotnet run -- --help
 ```
 
+Invalid modes/flags/ports now fail fast with a non-zero exit code and a help hint.
+
+- Run automated tests:
+
+```powershell
+dotnet test WebNet.CatalogServer.slnx
+```
+
 - Run TCP smoke-test client against local server:
 
 ```powershell
