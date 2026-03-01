@@ -15,6 +15,7 @@ public class CliParsingTests
         Assert.Equal(7070, options.Port);
         Assert.False(options.FailOnSelfCheck);
         Assert.False(options.SelfCheckOnly);
+        Assert.Null(options.DataRoot);
     }
 
     [Fact]
@@ -28,6 +29,7 @@ public class CliParsingTests
         Assert.Equal(7071, options.Port);
         Assert.True(options.FailOnSelfCheck);
         Assert.True(options.SelfCheckOnly);
+        Assert.Null(options.DataRoot);
     }
 
     [Fact]
@@ -40,6 +42,7 @@ public class CliParsingTests
         Assert.Equal("client", options.Mode);
         Assert.Equal("127.0.0.1", options.HostName);
         Assert.Equal(7070, options.Port);
+        Assert.Null(options.DataRoot);
     }
 
     [Fact]
@@ -67,5 +70,43 @@ public class CliParsingTests
 
         Assert.False(result);
         Assert.Contains("Invalid server port", error);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerDataRootWithEquals_ParsesSuccessfully()
+    {
+        var result = Program.TryParseOptions(["server", "--data-root=C:\\catalog-data"], out var options, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal("C:\\catalog-data", options.DataRoot);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerDataRootWithSeparatedValue_ParsesSuccessfully()
+    {
+        var result = Program.TryParseOptions(["server", "--data-root", "C:\\catalog-data"], out var options, out var error);
+
+        Assert.True(result);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal("C:\\catalog-data", options.DataRoot);
+    }
+
+    [Fact]
+    public void TryParseOptions_ServerDataRootWithoutValue_Fails()
+    {
+        var result = Program.TryParseOptions(["server", "--data-root"], out _, out var error);
+
+        Assert.False(result);
+        Assert.Contains("requires a path value", error);
+    }
+
+    [Fact]
+    public void TryParseOptions_ClientDataRoot_Fails()
+    {
+        var result = Program.TryParseOptions(["client", "--data-root", "C:\\catalog-data"], out _, out var error);
+
+        Assert.False(result);
+        Assert.Contains("only valid in server mode", error);
     }
 }

@@ -3,8 +3,15 @@
     public class Storage
     {
         private readonly Lock sync = new();
+        private readonly IStoragePersistenceAdapter persistence;
         private readonly Dictionary<string, DatabaseState> databases = new(StringComparer.OrdinalIgnoreCase);
         private string? primaryDatabaseName;
+
+        public Storage(IStoragePersistenceAdapter? persistence = null)
+        {
+            this.persistence = persistence ?? FileStoragePersistenceAdapter.CreateDefault();
+            this.LoadPersistedState();
+        }
 
         public Task<OperationResult<DatabaseMetadata>> CreateDatabaseAsync(CreateDatabaseRequest request, CancellationToken cancellationToken = default)
         {
@@ -36,6 +43,8 @@
                     this.SetPrimaryInternal(request.Name);
                 }
 
+                this.PersistStateUnderLock();
+
                 return Task.FromResult(OperationResult<DatabaseMetadata>.Ok(this.databases[request.Name].Metadata));
             }
         }
@@ -65,6 +74,8 @@
                         this.SetPrimaryInternal(this.primaryDatabaseName);
                     }
                 }
+
+                this.PersistStateUnderLock();
 
                 return Task.FromResult(OperationResult<DropDatabaseResponse>.Ok(new DropDatabaseResponse(request.Name, true)));
             }
@@ -106,14 +117,16 @@
                     Name = request.CatalogName
                 };
 
-                database.Catalogs[request.CatalogName] = catalog;
+                database.Catalogs[request.CatalogName] = new CatalogState(catalog, DateTimeOffset.UtcNow);
                 database.DocumentsByCatalog[request.CatalogName] = new Dictionary<Guid, Document>();
+
+                this.PersistStateUnderLock();
 
                 return Task.FromResult(OperationResult<CatalogMetadata>.Ok(new CatalogMetadata(
                     catalog.Id,
                     request.CatalogName,
                     request.DatabaseName,
-                    DateTimeOffset.UtcNow)));
+                    database.Catalogs[request.CatalogName].CreatedAtUtc)));
             }
         }
 
@@ -136,6 +149,8 @@
 
                 database.DocumentsByCatalog.Remove(request.CatalogName);
 
+                this.PersistStateUnderLock();
+
                 return Task.FromResult(OperationResult<DropCatalogResponse>.Ok(new DropCatalogResponse(request.DatabaseName, request.CatalogName, true)));
             }
         }
@@ -152,7 +167,7 @@
             lock (this.sync)
             {
                 var catalogs = database!.Catalogs
-                    .Select(kvp => new CatalogMetadata(kvp.Value.Id, kvp.Key, request.DatabaseName, DateTimeOffset.UtcNow))
+                    .Select(kvp => new CatalogMetadata(kvp.Value.Catalog.Id, kvp.Key, request.DatabaseName, kvp.Value.CreatedAtUtc))
                     .OrderBy(metadata => metadata.Name, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
@@ -178,6 +193,8 @@
             {
                 var replacedExisting = documentMap!.ContainsKey(request.Document.DocumentId);
                 documentMap[request.Document.DocumentId] = request.Document;
+
+                this.PersistStateUnderLock();
 
                 return Task.FromResult(OperationResult<PutDocumentResponse>.Ok(new PutDocumentResponse(
                     request.DatabaseName,
@@ -227,6 +244,8 @@
                     return Task.FromResult(OperationResult<DeleteDocumentResponse>.Fail("doc.not_found", $"Document '{request.DocumentId}' was not found in catalog '{request.CatalogName}'."));
                 }
 
+                this.PersistStateUnderLock();
+
                 return Task.FromResult(OperationResult<DeleteDocumentResponse>.Ok(new DeleteDocumentResponse(
                     request.DatabaseName,
                     request.CatalogName,
@@ -246,7 +265,7 @@
                 foreach (var database in this.databases.Values)
                 {
                     catalogCount += database.Catalogs.Count;
-                    catalogItemCount += database.Catalogs.Values.Sum(catalog => catalog.Count);
+                    catalogItemCount += database.Catalogs.Values.Sum(catalog => catalog.Catalog.Count);
                     documentCount += database.DocumentsByCatalog.Values.Sum(map => map.Count);
                 }
 
@@ -382,21 +401,88 @@
             this.primaryDatabaseName = databaseName;
         }
 
+        private void LoadPersistedState()
+        {
+            lock (this.sync)
+            {
+                this.databases.Clear();
+                this.primaryDatabaseName = null;
+
+                var persisted = this.persistence.Load();
+                foreach (var persistedDatabase in persisted.Databases)
+                {
+                    var state = new DatabaseState(persistedDatabase.Metadata);
+
+                    foreach (var persistedCatalog in persistedDatabase.Catalogs)
+                    {
+                        state.Catalogs[persistedCatalog.Catalog.Name] = new CatalogState(persistedCatalog.Catalog, persistedCatalog.CreatedAtUtc);
+                        state.DocumentsByCatalog[persistedCatalog.Catalog.Name] = persistedCatalog.Documents
+                            .ToDictionary(document => document.DocumentId, document => document);
+                    }
+
+                    this.databases[persistedDatabase.Metadata.Name] = state;
+                }
+
+                if (!string.IsNullOrWhiteSpace(persisted.PrimaryDatabaseName)
+                    && this.databases.ContainsKey(persisted.PrimaryDatabaseName))
+                {
+                    this.SetPrimaryInternal(persisted.PrimaryDatabaseName);
+                }
+                else if (this.databases.Count > 0)
+                {
+                    var preferredPrimary = this.databases.Values
+                        .FirstOrDefault(db => db.Metadata.IsPrimary)
+                        ?.Metadata.Name;
+
+                    if (!string.IsNullOrWhiteSpace(preferredPrimary) && this.databases.ContainsKey(preferredPrimary))
+                    {
+                        this.SetPrimaryInternal(preferredPrimary);
+                    }
+                    else
+                    {
+                        this.SetPrimaryInternal(this.databases.Keys.First());
+                    }
+                }
+            }
+        }
+
+        private void PersistStateUnderLock()
+        {
+            var snapshot = new StoragePersistentState(
+                this.primaryDatabaseName,
+                this.databases.Values
+                    .Select(database => new PersistedDatabaseState(
+                        database.Metadata,
+                        database.Catalogs.Values
+                            .Select(catalog => new PersistedCatalogState(
+                                catalog.Catalog,
+                                catalog.CreatedAtUtc,
+                                database.DocumentsByCatalog.TryGetValue(catalog.Catalog.Name, out var documents)
+                                    ? documents.Values.ToArray()
+                                    : []))
+                            .ToArray()))
+                    .ToArray());
+
+            this.persistence.Save(snapshot);
+        }
+
         private sealed class DatabaseState
         {
             public DatabaseState(DatabaseMetadata metadata)
             {
                 this.Metadata = metadata;
-                this.Catalogs = new Dictionary<string, Catalog>(StringComparer.OrdinalIgnoreCase);
+                this.Catalogs = new Dictionary<string, CatalogState>(StringComparer.OrdinalIgnoreCase);
                 this.DocumentsByCatalog = new Dictionary<string, Dictionary<Guid, Document>>(StringComparer.OrdinalIgnoreCase);
             }
 
             public DatabaseMetadata Metadata { get; set; }
 
-            public Dictionary<string, Catalog> Catalogs { get; }
+            public Dictionary<string, CatalogState> Catalogs { get; }
 
             public Dictionary<string, Dictionary<Guid, Document>> DocumentsByCatalog { get; }
         }
+
+        private sealed record CatalogState(Catalog Catalog, DateTimeOffset CreatedAtUtc);
 
     }
 }

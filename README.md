@@ -16,12 +16,31 @@
 
 ## For data model: Document, CatalogItem and Catalog
 
+## Persistence
+
+- Storage is now durable and automatically persisted to a MessagePack snapshot file.
+- Default storage root: `./data` (relative to the process working directory).
+- Configurable storage root: `--data-root <path>` or environment variable `WEBNET_DATA_ROOT`.
+- Filesystem layout is validated at startup and these directories are created if missing:
+	- `kv/zonetree`
+	- `kv/fastdb`
+	- `kv/rocksdb`
+	- `snapshots/storage.snapshot.mpk`
+- The server loads this snapshot on startup for automatic state recovery.
+- Every successful state mutation (create/drop db, create/drop catalog, put/delete document) is atomically persisted.
+
 ## Run
 
 - Start server (default port 7070):
 
 ```powershell
 dotnet run -- server
+```
+
+- Start server with explicit storage root (and strict startup checks):
+
+```powershell
+dotnet run -- server --data-root C:\catalog-data --fail-on-self-check
 ```
 
 - Start server on custom port:

@@ -27,31 +27,37 @@ internal static class Program
             return;
         }
 
-        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly);
+        await RunServerAsync(options.Port, options.FailOnSelfCheck, options.SelfCheckOnly, options.DataRoot);
     }
 
-    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly)
+    private static async Task RunServerAsync(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot)
     {
-        var storage = new Storage();
+        var layout = StorageDirectoryLayout.Resolve(dataRoot);
+        var fileSystemCheck = StorageFilesystemValidator.EnsureAndValidate(layout);
+        var storage = new Storage(new FileStoragePersistenceAdapter(layout.SnapshotFilePath));
         var server = new Server(
             storage,
             new AllowAllTokenAuthorizer(),
             new AllowAllClientCertificateValidator());
 
-        var selfCheck = storage.RunSelfCheck();
-        Console.WriteLine($"Startup SelfCheck => healthy={selfCheck.IsHealthy}, issues={selfCheck.IssueCount}");
-        foreach (var issue in selfCheck.Issues)
+        var storageCheck = storage.RunSelfCheck();
+        var combinedIssues = fileSystemCheck.Issues.Concat(storageCheck.Issues).ToArray();
+        var isHealthy = combinedIssues.Length == 0;
+
+        Console.WriteLine($"Storage roots => data='{layout.DataRoot}', zonetree='{layout.ZoneTreeRoot}', fastdb='{layout.FastDbRoot}', rocksdb='{layout.RocksDbRoot}', snapshot='{layout.SnapshotFilePath}'");
+        Console.WriteLine($"Startup SelfCheck => healthy={isHealthy}, issues={combinedIssues.Length}");
+        foreach (var issue in combinedIssues)
         {
             Console.WriteLine($"   ! {issue.Code}: {issue.Message}");
         }
 
         if (selfCheckOnly)
         {
-            Environment.ExitCode = selfCheck.IsHealthy ? 0 : 2;
+            Environment.ExitCode = isHealthy ? 0 : 2;
             return;
         }
 
-        if (failOnSelfCheck && !selfCheck.IsHealthy)
+        if (failOnSelfCheck && !isHealthy)
         {
             Console.Error.WriteLine("Startup aborted due to --fail-on-self-check and failing invariants.");
             Environment.ExitCode = 1;
@@ -225,13 +231,14 @@ internal static class Program
 
         if (mode != "server" && mode != "client")
         {
-            options = CliOptions.Server(defaultPort, failOnSelfCheck: false, selfCheckOnly: false);
+            options = CliOptions.Server(defaultPort, failOnSelfCheck: false, selfCheckOnly: false, dataRoot: null);
             error = $"Unknown mode '{mode}'.";
             return false;
         }
 
         var failOnSelfCheck = false;
         var selfCheckOnly = false;
+        string? dataRoot = null;
         var positional = new List<string>();
 
         for (var i = index; i < args.Length; i++)
@@ -243,7 +250,7 @@ internal static class Program
                 {
                     if (mode != "server")
                     {
-                        options = CliOptions.Server(defaultPort, false, false);
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
                         error = "--fail-on-self-check is only valid in server mode.";
                         return false;
                     }
@@ -256,7 +263,7 @@ internal static class Program
                 {
                     if (mode != "server")
                     {
-                        options = CliOptions.Server(defaultPort, false, false);
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
                         error = "--self-check-only is only valid in server mode.";
                         return false;
                     }
@@ -265,7 +272,26 @@ internal static class Program
                     continue;
                 }
 
-                options = CliOptions.Server(defaultPort, false, false);
+                if (token.StartsWith("--data-root", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mode != "server")
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        error = "--data-root is only valid in server mode.";
+                        return false;
+                    }
+
+                    if (!TryReadDataRootValue(args, ref i, token, out var value, out error))
+                    {
+                        options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
+                        return false;
+                    }
+
+                    dataRoot = value;
+                    continue;
+                }
+
+                options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
                 error = $"Unknown flag '{token}'.";
                 return false;
             }
@@ -277,7 +303,7 @@ internal static class Program
         {
             if (positional.Count > 1)
             {
-                options = CliOptions.Server(defaultPort, false, false);
+                options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
                 error = "Server mode accepts at most one positional argument: [port].";
                 return false;
             }
@@ -285,12 +311,12 @@ internal static class Program
             var port = defaultPort;
             if (positional.Count == 1 && !TryParsePort(positional[0], out port))
             {
-                options = CliOptions.Server(defaultPort, false, false);
+                options = CliOptions.Server(defaultPort, false, false, dataRoot: null);
                 error = $"Invalid server port '{positional[0]}'. Expected integer in range 1-65535.";
                 return false;
             }
 
-            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly);
+            options = CliOptions.Server(port, failOnSelfCheck, selfCheckOnly, dataRoot);
             error = string.Empty;
             return true;
         }
@@ -328,12 +354,46 @@ internal static class Program
         return false;
     }
 
+    private static bool TryReadDataRootValue(string[] args, ref int index, string token, out string value, out string error)
+    {
+        const string prefix = "--data-root=";
+        if (token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            value = token[prefix.Length..].Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                error = "--data-root requires a non-empty value.";
+                return false;
+            }
+
+            error = string.Empty;
+            return true;
+        }
+
+        if (index + 1 >= args.Length)
+        {
+            value = string.Empty;
+            error = "--data-root requires a path value.";
+            return false;
+        }
+
+        value = args[++index].Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            error = "--data-root requires a non-empty value.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("WebNet.CatalogServer");
         Console.WriteLine();
         Console.WriteLine("Usage:");
-        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only]");
+        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only] [--data-root <path>]");
         Console.WriteLine("  dotnet run -- client [host] [port]");
         Console.WriteLine("  dotnet run -- --help");
         Console.WriteLine();
@@ -344,6 +404,7 @@ internal static class Program
         Console.WriteLine("Flags:");
         Console.WriteLine("  --fail-on-self-check  Abort server startup when self-check is unhealthy.");
         Console.WriteLine("  --self-check-only     Run self-check and exit without starting listener.");
+        Console.WriteLine("  --data-root <path>    Override storage root (also via WEBNET_DATA_ROOT).\n                        Layout: kv/zonetree, kv/fastdb, kv/rocksdb, snapshots/.");
         Console.WriteLine("  --help, -h, /?        Show this help text.");
     }
 
@@ -354,11 +415,12 @@ internal sealed record CliOptions(
     int Port,
     string? HostName,
     bool FailOnSelfCheck,
-    bool SelfCheckOnly)
+    bool SelfCheckOnly,
+    string? DataRoot)
 {
-    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly) =>
-        new("server", port, null, failOnSelfCheck, selfCheckOnly);
+    public static CliOptions Server(int port, bool failOnSelfCheck, bool selfCheckOnly, string? dataRoot) =>
+        new("server", port, null, failOnSelfCheck, selfCheckOnly, dataRoot);
 
     public static CliOptions Client(string hostName, int port) =>
-        new("client", port, hostName, false, false);
+        new("client", port, hostName, false, false, null);
 }
