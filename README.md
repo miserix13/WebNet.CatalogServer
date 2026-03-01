@@ -30,6 +30,18 @@ dotnet run -- server
 dotnet run -- server 7071
 ```
 
+- Start server and fail startup if self-check has issues:
+
+```powershell
+dotnet run -- server --fail-on-self-check
+```
+
+- Start server on custom port with strict self-check:
+
+```powershell
+dotnet run -- server 7071 --fail-on-self-check
+```
+
 - Run TCP smoke-test client against local server:
 
 ```powershell

@@ -21,12 +21,27 @@ internal static class Program
     private static async Task RunServerAsync(string[] args)
     {
         var port = TryReadPort(args, defaultPort: 7070);
+        var failOnSelfCheck = HasFlag(args, "--fail-on-self-check");
 
         var storage = new Storage();
         var server = new Server(
             storage,
             new AllowAllTokenAuthorizer(),
             new AllowAllClientCertificateValidator());
+
+        var selfCheck = storage.RunSelfCheck();
+        Console.WriteLine($"Startup SelfCheck => healthy={selfCheck.IsHealthy}, issues={selfCheck.IssueCount}");
+        foreach (var issue in selfCheck.Issues)
+        {
+            Console.WriteLine($"   ! {issue.Code}: {issue.Message}");
+        }
+
+        if (failOnSelfCheck && !selfCheck.IsHealthy)
+        {
+            Console.Error.WriteLine("Startup aborted due to --fail-on-self-check and failing invariants.");
+            Environment.ExitCode = 1;
+            return;
+        }
 
         server.Start();
         await using var host = server.CreateTcpHost(TcpServerOptions.Default with { Port = port });
@@ -186,5 +201,10 @@ internal static class Program
         }
 
         return defaultPort;
+    }
+
+    private static bool HasFlag(string[] args, string flag)
+    {
+        return args.Any(arg => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase));
     }
 }
