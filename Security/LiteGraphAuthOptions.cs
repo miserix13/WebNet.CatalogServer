@@ -61,6 +61,7 @@ public sealed record LiteGraphAuthOptions(
         }
 
         var policy = defaults.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, EqualityComparer<CommandKind>.Default);
+        var mappedInOverride = new HashSet<CommandKind>();
         var entries = overrideRaw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var entry in entries)
         {
@@ -90,6 +91,28 @@ public sealed record LiteGraphAuthOptions(
             }
 
             policy[command] = roles;
+            mappedInOverride.Add(command);
+        }
+
+        var requireFullPolicy = ParseBoolEnvironment("WEBNET_AUTH_REQUIRE_FULL_COMMAND_POLICY", false);
+        if (requireFullPolicy)
+        {
+            var requiredCommands = Enum
+                .GetValues<CommandKind>()
+                .Where(command => command != CommandKind.Unknown)
+                .ToHashSet();
+
+            var missing = requiredCommands
+                .Where(command => !mappedInOverride.Contains(command))
+                .OrderBy(command => command)
+                .ToArray();
+
+            if (missing.Length > 0)
+            {
+                throw new AuthConfigurationException(
+                    "WEBNET_AUTH_REQUIRE_FULL_COMMAND_POLICY=true requires WEBNET_AUTH_COMMAND_ROLE_POLICY to define all commands. Missing: "
+                    + string.Join(", ", missing));
+            }
         }
 
         return policy;

@@ -50,6 +50,8 @@
   - override env: `WEBNET_AUTH_COMMAND_ROLE_POLICY`
   - format: `CommandKind=role1,role2;CommandKind=role3`
   - example: `GetDocument=admin,reader;PutDocument=admin,writer;SelfCheck=admin`
+  - optional strict coverage mode: `WEBNET_AUTH_REQUIRE_FULL_COMMAND_POLICY=true`
+    - when enabled, startup fails unless override policy explicitly maps every command (except `Unknown`)
   - startup fails fast with clear config error if command names are unknown or entries are malformed
 
 ## Run
