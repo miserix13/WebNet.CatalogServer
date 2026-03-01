@@ -589,7 +589,14 @@ public sealed record KvMaintenanceSnapshot(
         this.RocksDbSuccesses,
         this.RocksDbFailures,
         this.FastDbSuccesses,
-        this.FastDbFailures);
+        this.FastDbFailures,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0);
 }
 
 public static class KvMaintenanceDiagnostics

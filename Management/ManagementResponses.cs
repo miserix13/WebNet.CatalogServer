@@ -77,7 +77,14 @@ public record MaintenanceDiagnosticsResponse(
     [property: Key(2)] long RocksDbSuccesses,
     [property: Key(3)] long RocksDbFailures,
     [property: Key(4)] long FastDbSuccesses,
-    [property: Key(5)] long FastDbFailures);
+    [property: Key(5)] long FastDbFailures,
+    [property: Key(6)] long TransportRateLimitedRequests,
+    [property: Key(7)] long TransportRejectedConnections,
+    [property: Key(8)] long TransportReadTimeouts,
+    [property: Key(9)] long TransportInvalidFrames,
+    [property: Key(10)] long TransportInvalidRequests,
+    [property: Key(11)] long TransportDispatchErrors,
+    [property: Key(12)] long TransportProtocolDisconnects);
 
 public readonly record struct StorageStatistics(
     int DatabaseCount,

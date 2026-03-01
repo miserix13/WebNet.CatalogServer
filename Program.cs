@@ -213,7 +213,7 @@ internal static class Program
         if (maintenanceResponse.IsSuccess)
         {
             var maintenancePayload = MessagePackSerializer.Deserialize<MaintenanceDiagnosticsResponse>(maintenanceResponse.Payload);
-            Console.WriteLine($"Maintenance => zonetree(s={maintenancePayload.ZoneTreeSuccesses},f={maintenancePayload.ZoneTreeFailures}), rocksdb(s={maintenancePayload.RocksDbSuccesses},f={maintenancePayload.RocksDbFailures}), fastdb(s={maintenancePayload.FastDbSuccesses},f={maintenancePayload.FastDbFailures})");
+            Console.WriteLine($"Maintenance => zonetree(s={maintenancePayload.ZoneTreeSuccesses},f={maintenancePayload.ZoneTreeFailures}), rocksdb(s={maintenancePayload.RocksDbSuccesses},f={maintenancePayload.RocksDbFailures}), fastdb(s={maintenancePayload.FastDbSuccesses},f={maintenancePayload.FastDbFailures}), transport(rate_limited={maintenancePayload.TransportRateLimitedRequests}, rejected={maintenancePayload.TransportRejectedConnections}, read_timeouts={maintenancePayload.TransportReadTimeouts}, invalid_frames={maintenancePayload.TransportInvalidFrames}, invalid_requests={maintenancePayload.TransportInvalidRequests}, dispatch_errors={maintenancePayload.TransportDispatchErrors}, protocol_disconnects={maintenancePayload.TransportProtocolDisconnects})");
         }
         else
         {

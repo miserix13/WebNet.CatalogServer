@@ -1,4 +1,5 @@
-using System.Buffers.Binary;
+using BeetleX.Buffers;
+using DotNetty.Buffers;
 
 namespace WebNet.CatalogServer;
 
@@ -8,11 +9,19 @@ public static class TcpFrameCodec
 
     public static async Task WriteFrameAsync(Stream stream, byte[] payload, CancellationToken cancellationToken = default)
     {
-        Span<byte> header = stackalloc byte[PrefixLength];
-        BinaryPrimitives.WriteInt32BigEndian(header, payload.Length);
+        if (payload is null)
+        {
+            throw new ArgumentNullException(nameof(payload));
+        }
 
-        await stream.WriteAsync(header.ToArray(), cancellationToken);
-        await stream.WriteAsync(payload, cancellationToken);
+        var composite = Unpooled.Buffer(PrefixLength + payload.Length);
+        composite.WriteInt(payload.Length);
+        composite.WriteBytes(payload);
+
+        var data = new byte[composite.ReadableBytes];
+        composite.GetBytes(0, data);
+
+        await stream.WriteAsync(data, cancellationToken);
         await stream.FlushAsync(cancellationToken);
     }
 
@@ -25,7 +34,12 @@ public static class TcpFrameCodec
             return null;
         }
 
-        var length = BinaryPrimitives.ReadInt32BigEndian(header);
+        var length = BitHelper.ReadInt32(header, 0);
+        if (BitConverter.IsLittleEndian)
+        {
+            length = BitHelper.SwapInt32(length);
+        }
+
         if (length <= 0 || length > maxFrameBytes)
         {
             throw new InvalidDataException($"Invalid frame length '{length}'.");

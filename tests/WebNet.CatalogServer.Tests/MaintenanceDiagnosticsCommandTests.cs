@@ -9,6 +9,7 @@ public sealed class MaintenanceDiagnosticsCommandTests
     public async Task MaintenanceDiagnosticsCommand_ReturnsRuntimeCounters()
     {
         KvMaintenanceDiagnostics.Reset();
+        TransportAbuseDiagnostics.Reset();
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"));
 
@@ -44,6 +45,13 @@ public sealed class MaintenanceDiagnosticsCommandTests
             Assert.Equal(0, payload.ZoneTreeFailures);
             Assert.Equal(0, payload.RocksDbFailures);
             Assert.Equal(0, payload.FastDbFailures);
+            Assert.True(payload.TransportRateLimitedRequests >= 0);
+            Assert.True(payload.TransportRejectedConnections >= 0);
+            Assert.True(payload.TransportReadTimeouts >= 0);
+            Assert.True(payload.TransportInvalidFrames >= 0);
+            Assert.True(payload.TransportInvalidRequests >= 0);
+            Assert.True(payload.TransportDispatchErrors >= 0);
+            Assert.True(payload.TransportProtocolDisconnects >= 0);
 
             server.Stop();
         }
@@ -54,5 +62,21 @@ public sealed class MaintenanceDiagnosticsCommandTests
                 Directory.Delete(tempRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void TransportAbuseDiagnostics_ResetSnapshot_StartsAtZero()
+    {
+        TransportAbuseDiagnostics.Reset();
+
+        var snapshot = TransportAbuseDiagnostics.Snapshot();
+
+        Assert.Equal(0, snapshot.RateLimitedRequests);
+        Assert.Equal(0, snapshot.RejectedConnections);
+        Assert.Equal(0, snapshot.ReadTimeouts);
+        Assert.Equal(0, snapshot.InvalidFrames);
+        Assert.Equal(0, snapshot.InvalidRequests);
+        Assert.Equal(0, snapshot.DispatchErrors);
+        Assert.Equal(0, snapshot.ProtocolDisconnects);
     }
 }

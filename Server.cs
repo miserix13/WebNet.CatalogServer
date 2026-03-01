@@ -205,13 +205,21 @@ namespace WebNet.CatalogServer
         {
             _ = MessagePackSerializer.Deserialize<MaintenanceDiagnosticsRequest>(request.Payload);
             var snapshot = KvMaintenanceDiagnostics.Snapshot();
+            var transportSnapshot = TransportAbuseDiagnostics.Snapshot();
             var response = new MaintenanceDiagnosticsResponse(
                 snapshot.ZoneTreeSuccesses,
                 snapshot.ZoneTreeFailures,
                 snapshot.RocksDbSuccesses,
                 snapshot.RocksDbFailures,
                 snapshot.FastDbSuccesses,
-                snapshot.FastDbFailures);
+                snapshot.FastDbFailures,
+                transportSnapshot.RateLimitedRequests,
+                transportSnapshot.RejectedConnections,
+                transportSnapshot.ReadTimeouts,
+                transportSnapshot.InvalidFrames,
+                transportSnapshot.InvalidRequests,
+                transportSnapshot.DispatchErrors,
+                transportSnapshot.ProtocolDisconnects);
 
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
         }
