@@ -9,5 +9,6 @@ namespace WebNet.CatalogServer
         [Key(1)] public string Name { get; set; } = string.Empty;
         [Key(2)] public Dictionary<string, string> Properties { get; set; } = [];
         [Key(3)] public string[] Tags { get; set; } = [];
+        [Key(4)] public Dictionary<string, Document>? ExtraData { get; set; } = null;
     }
 }
