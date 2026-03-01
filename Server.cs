@@ -38,6 +38,12 @@ namespace WebNet.CatalogServer
             this.IsRunning = false;
         }
 
+        public TcpServerHost CreateTcpHost(TcpServerOptions? options = null)
+        {
+            var dispatcher = new TcpCommandDispatcher(this);
+            return new TcpServerHost(dispatcher, options);
+        }
+
         public async Task<ResponseEnvelope> HandleAsync(
             RequestEnvelope request,
             SecurityContext securityContext,
