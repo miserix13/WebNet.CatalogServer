@@ -42,6 +42,12 @@ dotnet run -- server --fail-on-self-check
 dotnet run -- server 7071 --fail-on-self-check
 ```
 
+- Run internal self-check only (no TCP listener):
+
+```powershell
+dotnet run -- server --self-check-only
+```
+
 - Run TCP smoke-test client against local server:
 
 ```powershell

@@ -22,6 +22,7 @@ internal static class Program
     {
         var port = TryReadPort(args, defaultPort: 7070);
         var failOnSelfCheck = HasFlag(args, "--fail-on-self-check");
+        var selfCheckOnly = HasFlag(args, "--self-check-only");
 
         var storage = new Storage();
         var server = new Server(
@@ -34,6 +35,12 @@ internal static class Program
         foreach (var issue in selfCheck.Issues)
         {
             Console.WriteLine($"   ! {issue.Code}: {issue.Message}");
+        }
+
+        if (selfCheckOnly)
+        {
+            Environment.ExitCode = selfCheck.IsHealthy ? 0 : 2;
+            return;
         }
 
         if (failOnSelfCheck && !selfCheck.IsHealthy)
