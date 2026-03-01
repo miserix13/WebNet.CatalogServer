@@ -78,6 +78,7 @@ namespace WebNet.CatalogServer
                 CommandKind.Health => await this.HandleHealthAsync(request, cancellationToken),
                 CommandKind.Metrics => await this.HandleMetricsAsync(request, cancellationToken),
                 CommandKind.SelfCheck => await this.HandleSelfCheckAsync(request, cancellationToken),
+                CommandKind.MaintenanceDiagnostics => await this.HandleMaintenanceDiagnosticsAsync(request, cancellationToken),
                 _ => ResponseEnvelope.Error(request.RequestId, "command.unsupported", $"Unsupported command '{request.Command}'.")
             };
         }
@@ -197,6 +198,21 @@ namespace WebNet.CatalogServer
         {
             _ = MessagePackSerializer.Deserialize<SelfCheckRequest>(request.Payload);
             var response = this.storage.RunSelfCheck();
+            return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
+        }
+
+        private Task<ResponseEnvelope> HandleMaintenanceDiagnosticsAsync(RequestEnvelope request, CancellationToken cancellationToken)
+        {
+            _ = MessagePackSerializer.Deserialize<MaintenanceDiagnosticsRequest>(request.Payload);
+            var snapshot = KvMaintenanceDiagnostics.Snapshot();
+            var response = new MaintenanceDiagnosticsResponse(
+                snapshot.ZoneTreeSuccesses,
+                snapshot.ZoneTreeFailures,
+                snapshot.RocksDbSuccesses,
+                snapshot.RocksDbFailures,
+                snapshot.FastDbSuccesses,
+                snapshot.FastDbFailures);
+
             return Task.FromResult(ResponseEnvelope.Success(request.RequestId, response));
         }
     }

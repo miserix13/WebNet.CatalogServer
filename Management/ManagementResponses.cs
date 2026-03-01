@@ -70,6 +70,15 @@ public record SelfCheckResponse(
     [property: Key(1)] int IssueCount,
     [property: Key(2)] IReadOnlyCollection<SelfCheckIssue> Issues);
 
+[MessagePackObject]
+public record MaintenanceDiagnosticsResponse(
+    [property: Key(0)] long ZoneTreeSuccesses,
+    [property: Key(1)] long ZoneTreeFailures,
+    [property: Key(2)] long RocksDbSuccesses,
+    [property: Key(3)] long RocksDbFailures,
+    [property: Key(4)] long FastDbSuccesses,
+    [property: Key(5)] long FastDbFailures);
+
 public readonly record struct StorageStatistics(
     int DatabaseCount,
     int CatalogCount,

@@ -169,6 +169,22 @@ internal static class Program
             Console.WriteLine($"SelfCheck => success=False, error={selfCheckResponse.ErrorCode}");
         }
 
+        var maintenanceRequest = RequestEnvelope.FromPayload(
+            Guid.NewGuid(),
+            CommandKind.MaintenanceDiagnostics,
+            new MaintenanceDiagnosticsRequest());
+
+        var maintenanceResponse = await SendAsync(stream, maintenanceRequest);
+        if (maintenanceResponse.IsSuccess)
+        {
+            var maintenancePayload = MessagePackSerializer.Deserialize<MaintenanceDiagnosticsResponse>(maintenanceResponse.Payload);
+            Console.WriteLine($"Maintenance => zonetree(s={maintenancePayload.ZoneTreeSuccesses},f={maintenancePayload.ZoneTreeFailures}), rocksdb(s={maintenancePayload.RocksDbSuccesses},f={maintenancePayload.RocksDbFailures}), fastdb(s={maintenancePayload.FastDbSuccesses},f={maintenancePayload.FastDbFailures})");
+        }
+        else
+        {
+            Console.WriteLine($"Maintenance => success=False, error={maintenanceResponse.ErrorCode}");
+        }
+
         var listDbRequest = RequestEnvelope.FromPayload(
             Guid.NewGuid(),
             CommandKind.ListDatabases,

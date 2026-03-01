@@ -7,6 +7,8 @@ public sealed class MultiEnginePersistenceTests
     [Fact]
     public async Task MultiEnginePersistence_RoundTripsDataModelAcrossRestart_AndWritesAllKvRoots()
     {
+        KvMaintenanceDiagnostics.Reset();
+
         var tempRoot = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"));
         var layout = StorageDirectoryLayout.Resolve(tempRoot);
         var adapter = new MultiEngineStoragePersistenceAdapter(layout);
@@ -57,6 +59,14 @@ public sealed class MultiEnginePersistenceTests
             Assert.True(DirectoryHasAnyFile(layout.ZoneTreeRoot));
             Assert.True(DirectoryHasAnyFile(layout.FastDbRoot));
             Assert.True(DirectoryHasAnyFile(layout.RocksDbRoot));
+
+            var maintenance = KvMaintenanceDiagnostics.Snapshot();
+            Assert.True(maintenance.ZoneTreeSuccesses > 0);
+            Assert.True(maintenance.RocksDbSuccesses > 0);
+            Assert.True(maintenance.FastDbSuccesses > 0);
+            Assert.Equal(0, maintenance.ZoneTreeFailures);
+            Assert.Equal(0, maintenance.RocksDbFailures);
+            Assert.Equal(0, maintenance.FastDbFailures);
         }
         finally
         {

@@ -53,3 +53,6 @@ public record MetricsRequest;
 
 [MessagePackObject]
 public record SelfCheckRequest;
+
+[MessagePackObject]
+public record MaintenanceDiagnosticsRequest;

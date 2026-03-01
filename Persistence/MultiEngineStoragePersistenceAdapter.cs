@@ -50,6 +50,7 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
             try
             {
                 store.Write(bytes);
+                store.RunMaintenance();
             }
             catch (Exception ex)
             {
@@ -79,6 +80,8 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
         bool TryRead(out byte[]? bytes);
 
         void Write(byte[] bytes);
+
+        void RunMaintenance();
     }
 
     private sealed class ZoneTreeBlobStore : IEngineBlobStore
@@ -109,6 +112,53 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
 
             using var tree = CreateTree(this.root);
             tree.Upsert(SnapshotKey, Convert.ToBase64String(bytes));
+        }
+
+        public void RunMaintenance()
+        {
+            Directory.CreateDirectory(this.root);
+
+            using var tree = CreateTree(this.root);
+            var maintainer = tree.CreateMaintainer();
+            if (maintainer is null)
+            {
+                KvMaintenanceDiagnostics.RecordZoneTreeSuccess();
+                return;
+            }
+
+            try
+            {
+                var maintainerType = maintainer.GetType();
+                foreach (var property in maintainerType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                {
+                    if (property.CanWrite && property.PropertyType == typeof(bool) && property.Name.StartsWith("EnableJobFor", StringComparison.Ordinal))
+                    {
+                        property.SetValue(maintainer, true);
+                    }
+                }
+
+                var mergeMethod = maintainerType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(m => m.GetParameters().Length == 0 && m.Name.Contains("Merge", StringComparison.OrdinalIgnoreCase));
+                mergeMethod?.Invoke(maintainer, null);
+
+                var waitMethod = maintainerType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(m => m.GetParameters().Length == 0 && string.Equals(m.Name, "WaitForBackgroundThreads", StringComparison.Ordinal));
+                waitMethod?.Invoke(maintainer, null);
+
+                KvMaintenanceDiagnostics.RecordZoneTreeSuccess();
+            }
+            catch
+            {
+                KvMaintenanceDiagnostics.RecordZoneTreeFailure();
+                throw;
+            }
+            finally
+            {
+                if (maintainer is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
         }
 
         private static Tenray.ZoneTree.IZoneTree<long, string> CreateTree(string path)
@@ -152,6 +202,24 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
             using var db = RocksDbSharp.RocksDb.Open(options, this.root);
             db.Put(SnapshotKey, bytes);
         }
+
+        public void RunMaintenance()
+        {
+            Directory.CreateDirectory(this.root);
+
+            try
+            {
+                var options = new RocksDbSharp.DbOptions().SetCreateIfMissing(true);
+                using var db = RocksDbSharp.RocksDb.Open(options, this.root);
+                db.CompactRange(Array.Empty<byte>(), Array.Empty<byte>(), null!);
+                KvMaintenanceDiagnostics.RecordRocksDbSuccess();
+            }
+            catch
+            {
+                KvMaintenanceDiagnostics.RecordRocksDbFailure();
+                throw;
+            }
+        }
     }
 
     private sealed class FastDbBlobStore : IEngineBlobStore
@@ -185,6 +253,23 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
             Directory.CreateDirectory(this.root);
             using var context = FastDbReflectionContext.Open(this.root);
             context.SetBytes(1, bytes);
+        }
+
+        public void RunMaintenance()
+        {
+            Directory.CreateDirectory(this.root);
+
+            try
+            {
+                using var context = FastDbReflectionContext.Open(this.root);
+                context.RunMaintenance();
+                KvMaintenanceDiagnostics.RecordFastDbSuccess();
+            }
+            catch
+            {
+                KvMaintenanceDiagnostics.RecordFastDbFailure();
+                throw;
+            }
         }
 
         private sealed class FastDbReflectionContext : IDisposable
@@ -309,6 +394,18 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
                 }
 
                 throw new InvalidOperationException("Unable to determine compatible FastDB write method for collection<int, byte[]>.");
+            }
+
+            public void RunMaintenance()
+            {
+                var dbType = this.database.GetType();
+
+                var flush = dbType.GetMethod("Flush", Type.EmptyTypes);
+                flush?.Invoke(this.database, null);
+
+                var defragmentAsync = dbType.GetMethod("DefragmentMemoryAsync", Type.EmptyTypes);
+                var task = defragmentAsync?.Invoke(this.database, null) as Task;
+                task?.GetAwaiter().GetResult();
             }
 
             public void Dispose()
@@ -476,4 +573,61 @@ public sealed class MultiEngineStoragePersistenceAdapter : IStoragePersistenceAd
             }
         }
     }
+}
+
+public sealed record KvMaintenanceSnapshot(
+    long ZoneTreeSuccesses,
+    long ZoneTreeFailures,
+    long RocksDbSuccesses,
+    long RocksDbFailures,
+    long FastDbSuccesses,
+    long FastDbFailures)
+{
+    public MaintenanceDiagnosticsResponse ToResponse() => new(
+        this.ZoneTreeSuccesses,
+        this.ZoneTreeFailures,
+        this.RocksDbSuccesses,
+        this.RocksDbFailures,
+        this.FastDbSuccesses,
+        this.FastDbFailures);
+}
+
+public static class KvMaintenanceDiagnostics
+{
+    private static long zoneTreeSuccesses;
+    private static long zoneTreeFailures;
+    private static long rocksDbSuccesses;
+    private static long rocksDbFailures;
+    private static long fastDbSuccesses;
+    private static long fastDbFailures;
+
+    public static void Reset()
+    {
+        Interlocked.Exchange(ref zoneTreeSuccesses, 0);
+        Interlocked.Exchange(ref zoneTreeFailures, 0);
+        Interlocked.Exchange(ref rocksDbSuccesses, 0);
+        Interlocked.Exchange(ref rocksDbFailures, 0);
+        Interlocked.Exchange(ref fastDbSuccesses, 0);
+        Interlocked.Exchange(ref fastDbFailures, 0);
+    }
+
+    public static KvMaintenanceSnapshot Snapshot() => new(
+        Interlocked.Read(ref zoneTreeSuccesses),
+        Interlocked.Read(ref zoneTreeFailures),
+        Interlocked.Read(ref rocksDbSuccesses),
+        Interlocked.Read(ref rocksDbFailures),
+        Interlocked.Read(ref fastDbSuccesses),
+        Interlocked.Read(ref fastDbFailures));
+
+    internal static void RecordZoneTreeSuccess() => Interlocked.Increment(ref zoneTreeSuccesses);
+
+    internal static void RecordZoneTreeFailure() => Interlocked.Increment(ref zoneTreeFailures);
+
+    internal static void RecordRocksDbSuccess() => Interlocked.Increment(ref rocksDbSuccesses);
+
+    internal static void RecordRocksDbFailure() => Interlocked.Increment(ref rocksDbFailures);
+
+    internal static void RecordFastDbSuccess() => Interlocked.Increment(ref fastDbSuccesses);
+
+    internal static void RecordFastDbFailure() => Interlocked.Increment(ref fastDbFailures);
 }

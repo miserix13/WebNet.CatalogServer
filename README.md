@@ -27,6 +27,10 @@
   - `kv/rocksdb`
   - `snapshots/storage.snapshot.mpk`
 - Persistence is written through all configured KV engines (ZoneTree, FastDB, RocksDB) and a snapshot fallback file.
+- After each successful persisted mutation, automated maintenance runs per engine:
+  - ZoneTree maintainer merge/background maintenance pass
+  - RocksDB `CompactRange` compaction pass
+  - FastDB `DefragmentMemoryAsync` + flush pass
 - On startup, state recovery loads from engine-backed persisted bytes (with snapshot fallback).
 - Every successful state mutation (create/drop db, create/drop catalog, put/delete document) is atomically persisted across engines.
 
@@ -88,4 +92,4 @@ dotnet test WebNet.CatalogServer.slnx
 dotnet run -- client 127.0.0.1 7070
 ```
 
-The smoke-test client now includes an internal `SelfCheck` management command that reports storage invariant issues.
+The smoke-test client now includes internal `SelfCheck` and `MaintenanceDiagnostics` management commands.
