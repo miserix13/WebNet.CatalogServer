@@ -48,6 +48,12 @@ dotnet run -- server 7071 --fail-on-self-check
 dotnet run -- server --self-check-only
 ```
 
+- Show CLI help:
+
+```powershell
+dotnet run -- --help
+```
+
 - Run TCP smoke-test client against local server:
 
 ```powershell

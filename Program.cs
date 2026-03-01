@@ -7,6 +7,12 @@ internal static class Program
 {
     public static async Task Main(string[] args)
     {
+        if (HasFlag(args, "--help") || HasFlag(args, "-h") || HasFlag(args, "/?"))
+        {
+            PrintHelp();
+            return;
+        }
+
         var mode = args.Length > 0 ? args[0].Trim().ToLowerInvariant() : "server";
 
         if (mode == "client")
@@ -213,5 +219,24 @@ internal static class Program
     private static bool HasFlag(string[] args, string flag)
     {
         return args.Any(arg => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void PrintHelp()
+    {
+        Console.WriteLine("WebNet.CatalogServer");
+        Console.WriteLine();
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  dotnet run -- server [port] [--fail-on-self-check] [--self-check-only]");
+        Console.WriteLine("  dotnet run -- client [host] [port]");
+        Console.WriteLine("  dotnet run -- --help");
+        Console.WriteLine();
+        Console.WriteLine("Modes:");
+        Console.WriteLine("  server              Starts TCP server (default mode).");
+        Console.WriteLine("  client              Runs smoke-test client against a server.");
+        Console.WriteLine();
+        Console.WriteLine("Flags:");
+        Console.WriteLine("  --fail-on-self-check  Abort server startup when self-check is unhealthy.");
+        Console.WriteLine("  --self-check-only     Run self-check and exit without starting listener.");
+        Console.WriteLine("  --help, -h, /?        Show this help text.");
     }
 }
