@@ -2,6 +2,7 @@ namespace WebNet.CatalogServer.Tests;
 
 using Xunit;
 
+[Collection("DiagnosticsCounters")]
 public sealed class MultiEnginePersistenceTests
 {
     [Fact]

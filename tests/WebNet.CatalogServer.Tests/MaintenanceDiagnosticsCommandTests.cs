@@ -1,8 +1,11 @@
 namespace WebNet.CatalogServer.Tests;
 
 using MessagePack;
+using System.Net;
+using System.Net.Sockets;
 using Xunit;
 
+[Collection("DiagnosticsCounters")]
 public sealed class MaintenanceDiagnosticsCommandTests
 {
     [Fact]
@@ -78,5 +81,91 @@ public sealed class MaintenanceDiagnosticsCommandTests
         Assert.Equal(0, snapshot.InvalidRequests);
         Assert.Equal(0, snapshot.DispatchErrors);
         Assert.Equal(0, snapshot.ProtocolDisconnects);
+    }
+
+    [Fact]
+    public async Task MaintenanceDiagnosticsCommand_ReportsTransportRateLimitedRequests()
+    {
+        TransportAbuseDiagnostics.Reset();
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"));
+        var port = GetFreeTcpPort();
+
+        var layout = StorageDirectoryLayout.Resolve(tempRoot);
+        var storage = new Storage(new MultiEngineStoragePersistenceAdapter(layout));
+        var server = new Server(storage, new AllowAllTokenAuthorizer(), new AllowAllClientCertificateValidator());
+
+        await using var host = server.CreateTcpHost(
+            TcpServerOptions.Default with
+            {
+                BindAddress = IPAddress.Loopback,
+                Port = port,
+                MaxRequestsPerSecondPerClient = 1,
+                MaxBurstRequestsPerClient = 1,
+                DisconnectOnRateLimit = false,
+                ClientReadTimeout = TimeSpan.FromSeconds(5)
+            });
+
+        try
+        {
+            server.Start();
+            await host.StartAsync();
+
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            using var stream = client.GetStream();
+
+            var burstResponses = new List<ResponseEnvelope>();
+            for (var i = 0; i < 5; i++)
+            {
+                burstResponses.Add(await SendWireAsync(stream, CommandKind.Health, new HealthRequest()));
+            }
+
+            Assert.Contains(burstResponses, response => !response.IsSuccess && response.ErrorCode == "transport.rate_limited");
+
+            var diagnosticsRequest = RequestEnvelope.FromPayload(
+                Guid.NewGuid(),
+                CommandKind.MaintenanceDiagnostics,
+                new MaintenanceDiagnosticsRequest());
+            var diagnostics = await server.HandleAsync(diagnosticsRequest, new SecurityContext("dev-token", "dev-thumbprint", "test", ["admin"]));
+
+            Assert.True(diagnostics.IsSuccess);
+            var payload = MessagePackSerializer.Deserialize<MaintenanceDiagnosticsResponse>(diagnostics.Payload);
+            Assert.True(payload.TransportRateLimitedRequests > 0);
+        }
+        finally
+        {
+            await host.StopAsync();
+            server.Stop();
+
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
+    private static async Task<ResponseEnvelope> SendWireAsync<TPayload>(NetworkStream stream, CommandKind command, TPayload payload)
+    {
+        var request = RequestEnvelope.FromPayload(Guid.NewGuid(), command, payload!);
+        var wire = new WireRequest(request, Token: "dev-token", ClientCertificateThumbprint: "dev-thumbprint", Subject: "test", Roles: ["admin"]);
+
+        await TcpFrameCodec.WriteFrameAsync(stream, MessagePackSerializer.Serialize(wire));
+        var frame = await TcpFrameCodec.ReadFrameAsync(stream, maxFrameBytes: 4 * 1024 * 1024);
+        if (frame is null)
+        {
+            throw new InvalidOperationException("Connection closed before response frame was received.");
+        }
+
+        return MessagePackSerializer.Deserialize<WireResponse>(frame).Response;
     }
 }

@@ -54,7 +54,11 @@ public record HealthResponse(
     [property: Key(1)] DateTimeOffset StartedAtUtc,
     [property: Key(2)] TimeSpan Uptime,
     [property: Key(3)] int DatabaseCount,
-    [property: Key(4)] int CatalogCount);
+    [property: Key(4)] int CatalogCount,
+    [property: Key(5)] int DocumentCount,
+    [property: Key(6)] string? PrimaryDatabaseName,
+    [property: Key(7)] int SelfCheckIssueCount,
+    [property: Key(8)] bool IsRunning);
 
 [MessagePackObject]
 public record MetricsResponse([property: Key(0)] IReadOnlyDictionary<string, double> Values);
