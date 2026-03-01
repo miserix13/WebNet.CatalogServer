@@ -34,7 +34,7 @@ internal static class Program
     {
         var layout = StorageDirectoryLayout.Resolve(dataRoot);
         var fileSystemCheck = StorageFilesystemValidator.EnsureAndValidate(layout);
-        var storage = new Storage(new FileStoragePersistenceAdapter(layout.SnapshotFilePath));
+        var storage = new Storage(new MultiEngineStoragePersistenceAdapter(layout));
         var server = new Server(
             storage,
             new AllowAllTokenAuthorizer(),

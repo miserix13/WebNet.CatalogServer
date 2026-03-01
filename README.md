@@ -26,8 +26,9 @@
   - `kv/fastdb`
   - `kv/rocksdb`
   - `snapshots/storage.snapshot.mpk`
-- The server loads this snapshot on startup for automatic state recovery.
-- Every successful state mutation (create/drop db, create/drop catalog, put/delete document) is atomically persisted.
+- Persistence is written through all configured KV engines (ZoneTree, FastDB, RocksDB) and a snapshot fallback file.
+- On startup, state recovery loads from engine-backed persisted bytes (with snapshot fallback).
+- Every successful state mutation (create/drop db, create/drop catalog, put/delete document) is atomically persisted across engines.
 
 ## Run
 
