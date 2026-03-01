@@ -50,6 +50,7 @@
   - override env: `WEBNET_AUTH_COMMAND_ROLE_POLICY`
   - format: `CommandKind=role1,role2;CommandKind=role3`
   - example: `GetDocument=admin,reader;PutDocument=admin,writer;SelfCheck=admin`
+  - startup fails fast with clear config error if command names are unknown or entries are malformed
 
 ## Run
 

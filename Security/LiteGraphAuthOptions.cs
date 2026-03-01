@@ -8,6 +8,14 @@ public sealed record LiteGraphAuthOptions(
     IReadOnlyCollection<string> AllowedCertificateThumbprints,
     IReadOnlyDictionary<CommandKind, IReadOnlyCollection<string>> CommandRolePolicy)
 {
+    public sealed class AuthConfigurationException : Exception
+    {
+        public AuthConfigurationException(string message)
+            : base(message)
+        {
+        }
+    }
+
     public static LiteGraphAuthOptions Resolve(string? dataRoot = null)
     {
         var root = string.IsNullOrWhiteSpace(dataRoot)
@@ -59,12 +67,14 @@ public sealed record LiteGraphAuthOptions(
             var parts = entry.Split('=', 2, StringSplitOptions.TrimEntries);
             if (parts.Length != 2)
             {
-                continue;
+                throw new AuthConfigurationException(
+                    $"Invalid WEBNET_AUTH_COMMAND_ROLE_POLICY entry '{entry}'. Expected format 'CommandKind=role1,role2'.");
             }
 
             if (!Enum.TryParse<CommandKind>(parts[0], ignoreCase: true, out var command))
             {
-                continue;
+                throw new AuthConfigurationException(
+                    $"Unknown command '{parts[0]}' in WEBNET_AUTH_COMMAND_ROLE_POLICY. Use a valid CommandKind value.");
             }
 
             var roles = parts[1]
@@ -73,10 +83,13 @@ public sealed record LiteGraphAuthOptions(
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
 
-            if (roles.Length > 0)
+            if (roles.Length == 0)
             {
-                policy[command] = roles;
+                throw new AuthConfigurationException(
+                    $"Command '{command}' in WEBNET_AUTH_COMMAND_ROLE_POLICY must include at least one role.");
             }
+
+            policy[command] = roles;
         }
 
         return policy;

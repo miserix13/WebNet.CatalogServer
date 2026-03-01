@@ -35,7 +35,17 @@ internal static class Program
         var layout = StorageDirectoryLayout.Resolve(dataRoot);
         var fileSystemCheck = StorageFilesystemValidator.EnsureAndValidate(layout);
         var storage = new Storage(new MultiEngineStoragePersistenceAdapter(layout));
-        var authOptions = LiteGraphAuthOptions.Resolve(layout.DataRoot);
+        LiteGraphAuthOptions authOptions;
+        try
+        {
+            authOptions = LiteGraphAuthOptions.Resolve(layout.DataRoot);
+        }
+        catch (LiteGraphAuthOptions.AuthConfigurationException ex)
+        {
+            Console.Error.WriteLine($"Configuration error: {ex.Message}");
+            Environment.ExitCode = 64;
+            return;
+        }
 
         using var tokenAuthorizer = new LiteGraphTokenAuthorizer(authOptions);
         var certificateValidator = new ThumbprintAllowListClientCertificateValidator(authOptions.AllowedCertificateThumbprints);
