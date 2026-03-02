@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="WebNet.CatalogServer.csproj" />
+  <Project Path="src/WebNet.CatalogClient/WebNet.CatalogClient.csproj" />
   <Project Path="tests/WebNet.CatalogServer.Tests/WebNet.CatalogServer.Tests.csproj" />
+  <Project Path="tests/WebNet.CatalogClient.Tests/WebNet.CatalogClient.Tests.csproj" />
 </Solution>

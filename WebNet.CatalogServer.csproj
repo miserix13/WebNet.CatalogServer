@@ -8,8 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="src\**\*.cs" />
     <Compile Remove="tests\**\*.cs" />
+    <EmbeddedResource Remove="src\**\*" />
     <EmbeddedResource Remove="tests\**\*" />
+    <None Remove="src\**\*" />
     <None Remove="tests\**\*" />
   </ItemGroup>
 
