@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "RlbesILaiEY=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\jojow.WEBSTER\\source\\repos\\WebNet.CatalogServer\\src\\WebNet.CatalogClient\\WebNet.CatalogClient.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\jojow.WEBSTER\\.nuget\\packages\\messagepack\\3.1.4\\messagepack.3.1.4.nupkg.sha512",
+    "C:\\Users\\jojow.WEBSTER\\.nuget\\packages\\messagepack.annotations\\3.1.4\\messagepack.annotations.3.1.4.nupkg.sha512",
+    "C:\\Users\\jojow.WEBSTER\\.nuget\\packages\\messagepackanalyzer\\3.1.4\\messagepackanalyzer.3.1.4.nupkg.sha512",
+    "C:\\Users\\jojow.WEBSTER\\.nuget\\packages\\microsoft.net.stringtools\\17.11.4\\microsoft.net.stringtools.17.11.4.nupkg.sha512"
+  ],
+  "logs": []
+}
