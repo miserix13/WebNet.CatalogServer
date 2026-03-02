@@ -13,6 +13,8 @@ public sealed class MaintenanceDiagnosticsCommandTests
     {
         KvMaintenanceDiagnostics.Reset();
         TransportAbuseDiagnostics.Reset();
+        ClusterRuntimeDiagnostics.Configure(false, "webnet-catalog", "127.0.0.1", 8110);
+        ClusterRuntimeDiagnostics.SetRunning(false, 0);
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"));
 
@@ -55,6 +57,12 @@ public sealed class MaintenanceDiagnosticsCommandTests
             Assert.True(payload.TransportInvalidRequests >= 0);
             Assert.True(payload.TransportDispatchErrors >= 0);
             Assert.True(payload.TransportProtocolDisconnects >= 0);
+            Assert.False(payload.ClusterEnabled);
+            Assert.False(payload.ClusterRunning);
+            Assert.Equal("webnet-catalog", payload.ClusterSystemName);
+            Assert.Equal("127.0.0.1", payload.ClusterHostname);
+            Assert.Equal(8110, payload.ClusterPort);
+            Assert.Equal(0, payload.ClusterMemberCount);
 
             server.Stop();
         }
@@ -87,6 +95,8 @@ public sealed class MaintenanceDiagnosticsCommandTests
     public async Task MaintenanceDiagnosticsCommand_ReportsTransportRateLimitedRequests()
     {
         TransportAbuseDiagnostics.Reset();
+        ClusterRuntimeDiagnostics.Configure(false, "webnet-catalog", "127.0.0.1", 8110);
+        ClusterRuntimeDiagnostics.SetRunning(false, 0);
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "WebNet.CatalogServer.Tests", Guid.NewGuid().ToString("N"));
         var port = GetFreeTcpPort();
@@ -132,6 +142,8 @@ public sealed class MaintenanceDiagnosticsCommandTests
             Assert.True(diagnostics.IsSuccess);
             var payload = MessagePackSerializer.Deserialize<MaintenanceDiagnosticsResponse>(diagnostics.Payload);
             Assert.True(payload.TransportRateLimitedRequests > 0);
+            Assert.False(payload.ClusterEnabled);
+            Assert.False(payload.ClusterRunning);
         }
         finally
         {

@@ -94,7 +94,13 @@ public record MaintenanceDiagnosticsResponse(
     [property: Key(9)] long TransportInvalidFrames,
     [property: Key(10)] long TransportInvalidRequests,
     [property: Key(11)] long TransportDispatchErrors,
-    [property: Key(12)] long TransportProtocolDisconnects);
+    [property: Key(12)] long TransportProtocolDisconnects,
+    [property: Key(13)] bool ClusterEnabled,
+    [property: Key(14)] bool ClusterRunning,
+    [property: Key(15)] string? ClusterSystemName,
+    [property: Key(16)] string? ClusterHostname,
+    [property: Key(17)] int ClusterPort,
+    [property: Key(18)] int ClusterMemberCount);
 
 public readonly record struct StorageStatistics(
     int DatabaseCount,

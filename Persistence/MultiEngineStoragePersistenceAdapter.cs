@@ -596,6 +596,12 @@ public sealed record KvMaintenanceSnapshot(
         0,
         0,
         0,
+        0,
+        false,
+        false,
+        null,
+        null,
+        0,
         0);
 }
 
