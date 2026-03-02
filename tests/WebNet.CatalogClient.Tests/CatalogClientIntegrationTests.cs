@@ -38,17 +38,17 @@ public sealed class CatalogClientIntegrationTests
 
         try
         {
-            var db = await client.CreateDatabaseAsync(new CreateDatabaseRequest("default", ConsistencyLevel.Strong, MakePrimary: true));
+            var db = await client.CreateDatabaseAsync(new WebNet.CatalogClient.CreateDatabaseRequest("default", WebNet.CatalogClient.ConsistencyLevel.Strong, MakePrimary: true));
             Assert.Equal("default", db.Name);
 
-            var catalog = await client.CreateCatalogAsync(new CreateCatalogRequest("default", "products"));
+            var catalog = await client.CreateCatalogAsync(new WebNet.CatalogClient.CreateCatalogRequest("default", "products"));
             Assert.Equal("products", catalog.Name);
 
             var documentId = Guid.NewGuid();
-            var put = await client.PutDocumentAsync(new PutDocumentRequest(
+            var put = await client.PutDocumentAsync(new WebNet.CatalogClient.PutDocumentRequest(
                 "default",
                 "products",
-                new Document
+                new WebNet.CatalogClient.Document
                 {
                     DocumentId = documentId,
                     Properties =
@@ -60,7 +60,7 @@ public sealed class CatalogClientIntegrationTests
 
             Assert.Equal(documentId, put.DocumentId);
 
-            var get = await client.GetDocumentAsync(new GetDocumentRequest("default", "products", documentId));
+            var get = await client.GetDocumentAsync(new WebNet.CatalogClient.GetDocumentRequest("default", "products", documentId));
             Assert.Equal("Catalog Client", get.Document.Properties["name"]);
 
             var health = await client.HealthAsync();

@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Catalog database server with TCP MessagePack protocol support.")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1962eeeb8229f63cc6579e2250a80ebb88f0bd7b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0df1d2b42c474e1ca6afa8a151d96f272194ef68")]
 [assembly: System.Reflection.AssemblyProductAttribute("WebNet.CatalogServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WebNet.CatalogServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

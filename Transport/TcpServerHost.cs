@@ -114,19 +114,6 @@ public sealed class TcpServerHost : IAsyncDisposable
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            if (!limiter.TryConsume(DateTimeOffset.UtcNow))
-            {
-                TransportAbuseDiagnostics.RecordRateLimitedRequest();
-                await TryWriteErrorAsync(stream, "transport.rate_limited", "Too many requests.", cancellationToken);
-                if (this.options.DisconnectOnRateLimit)
-                {
-                    TransportAbuseDiagnostics.RecordProtocolDisconnect();
-                    break;
-                }
-
-                continue;
-            }
-
             byte[]? requestPayload;
             try
             {
@@ -165,6 +152,19 @@ public sealed class TcpServerHost : IAsyncDisposable
             if (requestPayload is null)
             {
                 break;
+            }
+
+            if (!limiter.TryConsume(DateTimeOffset.UtcNow))
+            {
+                TransportAbuseDiagnostics.RecordRateLimitedRequest();
+                await TryWriteErrorAsync(stream, "transport.rate_limited", "Too many requests.", cancellationToken);
+                if (this.options.DisconnectOnRateLimit)
+                {
+                    TransportAbuseDiagnostics.RecordProtocolDisconnect();
+                    break;
+                }
+
+                continue;
             }
 
             byte[] responsePayload;

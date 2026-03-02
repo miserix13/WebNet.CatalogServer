@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Typed TCP MessagePack client library for WebNet CatalogServer.")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+33f51e32346c4843339fe55ddcbb92eeab940de2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0df1d2b42c474e1ca6afa8a151d96f272194ef68")]
 [assembly: System.Reflection.AssemblyProductAttribute("WebNet.CatalogClient")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WebNet.CatalogClient")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
