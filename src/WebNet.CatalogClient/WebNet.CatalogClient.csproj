@@ -4,6 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>WebNet.CatalogClient</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>WebNet</Authors>
+    <Company>WebNet</Company>
+    <Description>Typed TCP MessagePack client library for WebNet CatalogServer.</Description>
+    <PackageTags>catalog;database;messagepack;tcp</PackageTags>
+    <RepositoryUrl>https://github.com/miserix13/WebNet.CatalogServer</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/miserix13/WebNet.CatalogServer</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>

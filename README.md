@@ -200,3 +200,12 @@ Error handling notes:
 - Business/authorization failures are surfaced as `CatalogClientException` with server `ErrorCode` values (for example `auth.forbidden`).
 - `transport.rate_limited` responses are retried up to `RateLimitRetryCount` with `RateLimitRetryDelay` between attempts.
 - Socket/stream failures are retried up to `ConnectionRetryCount` with `ConnectionRetryDelay`, reconnecting automatically.
+
+API reference:
+
+| Area | Methods |
+| --- | --- |
+| Database | `CreateDatabaseAsync`, `DropDatabaseAsync`, `ListDatabasesAsync` |
+| Catalog | `CreateCatalogAsync`, `DropCatalogAsync`, `ListCatalogsAsync` |
+| Document | `PutDocumentAsync`, `GetDocumentAsync`, `DeleteDocumentAsync` |
+| Diagnostics | `HealthAsync`, `MetricsAsync`, `SelfCheckAsync`, `MaintenanceDiagnosticsAsync` |
