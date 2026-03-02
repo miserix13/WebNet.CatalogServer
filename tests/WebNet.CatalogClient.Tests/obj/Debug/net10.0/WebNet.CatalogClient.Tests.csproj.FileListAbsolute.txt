@@ -1,0 +1,8 @@
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\bin\Debug\net10.0\.msCoverageSourceRootsMapping_WebNet.CatalogClient.Tests
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\bin\Debug\net10.0\CoverletSourceRootsMapping_WebNet.CatalogClient.Tests
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\obj\Debug\net10.0\WebNet.CatalogClient.Tests.csproj.AssemblyReference.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\obj\Debug\net10.0\WebNet.CatalogClient.Tests.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\obj\Debug\net10.0\WebNet.CatalogClient.Tests.AssemblyInfoInputs.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\obj\Debug\net10.0\WebNet.CatalogClient.Tests.AssemblyInfo.cs
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\obj\Debug\net10.0\WebNet.CatalogClient.Tests.csproj.CoreCompileInputs.cache
+C:\Users\jojow.WEBSTER\source\repos\WebNet.CatalogServer\tests\WebNet.CatalogClient.Tests\obj\Debug\net10.0\WebNet.CatalogClient.Tests.sourcelink.json

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Diagnostics;
 using WebNet.CatalogClient;
 using Xunit;
 
@@ -107,6 +108,56 @@ public sealed class CatalogClientIntegrationTests
         {
             var exception = await Assert.ThrowsAsync<CatalogClientException>(() => client.HealthAsync());
             Assert.Equal("auth.invalid_certificate", exception.ErrorCode);
+        }
+        finally
+        {
+            await host.StopAsync();
+            server.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task Client_RateLimitedRequest_RetriesAndSucceeds()
+    {
+        var snapshotPath = Path.Combine(Path.GetTempPath(), "WebNet.CatalogClient.Tests", Guid.NewGuid().ToString("N"), "client-rate-limit.snapshot.mpk");
+        var storage = new Storage(new FileStoragePersistenceAdapter(snapshotPath));
+        var server = new Server(storage, new AllowAllTokenAuthorizer(), new AllowAllClientCertificateValidator());
+        var port = GetFreeTcpPort();
+
+        await using var host = server.CreateTcpHost(TcpServerOptions.Default with
+        {
+            BindAddress = IPAddress.Loopback,
+            Port = port,
+            MaxRequestsPerSecondPerClient = 1,
+            MaxBurstRequestsPerClient = 1,
+            DisconnectOnRateLimit = false
+        });
+
+        server.Start();
+        await host.StartAsync();
+
+        var options = new CatalogClientOptions
+        {
+            Address = IPAddress.Loopback,
+            Port = port,
+            RateLimitRetryCount = 2,
+            RateLimitRetryDelay = TimeSpan.FromMilliseconds(1100)
+        };
+
+        await using var client = new WebNet.CatalogClient.CatalogClient(options, _ =>
+            ValueTask.FromResult(new CatalogClientAuthContext("dev-token", "dev-thumbprint", "test-user", ["admin"])));
+
+        try
+        {
+            var first = await client.HealthAsync();
+            Assert.True(first.IsRunning);
+
+            var stopwatch = Stopwatch.StartNew();
+            var second = await client.HealthAsync();
+            stopwatch.Stop();
+
+            Assert.True(second.IsRunning);
+            Assert.True(stopwatch.Elapsed >= TimeSpan.FromMilliseconds(900));
         }
         finally
         {

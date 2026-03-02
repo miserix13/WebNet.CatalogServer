@@ -80,13 +80,6 @@ public sealed class CatalogClient : IAsyncDisposable
         await this.requestGate.WaitAsync(cancellationToken);
         try
         {
-            await this.EnsureConnectedAsync(cancellationToken);
-
-            if (this.stream is null)
-            {
-                throw new InvalidOperationException("Client stream is not available.");
-            }
-
             var requestId = Guid.NewGuid();
             var envelope = RequestEnvelope.FromPayload(requestId, command, request!);
             var authContext = await this.authContextProvider(cancellationToken);
@@ -97,32 +90,69 @@ public sealed class CatalogClient : IAsyncDisposable
                 authContext.Subject,
                 authContext.Roles);
 
-            var bytes = MessagePackSerializer.Serialize(wire);
-            await TcpFrameCodec.WriteFrameAsync(this.stream, bytes, cancellationToken);
+            var payloadBytes = MessagePackSerializer.Serialize(wire);
+            var connectionAttempt = 0;
+            var rateLimitAttempt = 0;
 
-            var frame = await TcpFrameCodec.ReadFrameAsync(this.stream, this.options.MaxFrameBytes, cancellationToken);
-            if (frame is null)
+            while (true)
             {
-                this.DisposeConnection();
-                throw new IOException("Connection closed before response frame was received.");
-            }
+                try
+                {
+                    await this.EnsureConnectedAsync(cancellationToken);
 
-            var response = MessagePackSerializer.Deserialize<WireResponse>(frame).Response;
-            if (!response.IsSuccess)
-            {
-                throw new CatalogClientException(
-                    response.RequestId,
-                    response.ErrorCode ?? "unknown",
-                    response.ErrorMessage ?? "Catalog server returned an unknown error.");
-            }
+                    if (this.stream is null)
+                    {
+                        throw new InvalidOperationException("Client stream is not available.");
+                    }
 
-            if (response.RequestId != requestId && response.RequestId != Guid.Empty)
-            {
-                this.DisposeConnection();
-                throw new CatalogClientException(response.RequestId, "protocol.request_id_mismatch", "Response request ID did not match request ID.");
-            }
+                    await TcpFrameCodec.WriteFrameAsync(this.stream, payloadBytes, cancellationToken);
 
-            return MessagePackSerializer.Deserialize<TResponse>(response.Payload);
+                    var frame = await TcpFrameCodec.ReadFrameAsync(this.stream, this.options.MaxFrameBytes, cancellationToken);
+                    if (frame is null)
+                    {
+                        this.DisposeConnection();
+                        throw new IOException("Connection closed before response frame was received.");
+                    }
+
+                    var response = MessagePackSerializer.Deserialize<WireResponse>(frame).Response;
+
+                    if (response.RequestId != requestId && response.RequestId != Guid.Empty)
+                    {
+                        this.DisposeConnection();
+                        throw new CatalogClientException(response.RequestId, "protocol.request_id_mismatch", "Response request ID did not match request ID.");
+                    }
+
+                    if (response.IsSuccess)
+                    {
+                        return MessagePackSerializer.Deserialize<TResponse>(response.Payload);
+                    }
+
+                    var errorCode = response.ErrorCode ?? "unknown";
+                    var errorMessage = response.ErrorMessage ?? "Catalog server returned an unknown error.";
+
+                    if (string.Equals(errorCode, "transport.rate_limited", StringComparison.OrdinalIgnoreCase)
+                        && rateLimitAttempt < this.options.RateLimitRetryCount)
+                    {
+                        rateLimitAttempt++;
+                        await Task.Delay(this.options.RateLimitRetryDelay, cancellationToken);
+                        continue;
+                    }
+
+                    throw new CatalogClientException(response.RequestId, errorCode, errorMessage);
+                }
+                catch (SocketException) when (connectionAttempt < this.options.ConnectionRetryCount)
+                {
+                    connectionAttempt++;
+                    this.DisposeConnection();
+                    await Task.Delay(this.options.ConnectionRetryDelay, cancellationToken);
+                }
+                catch (IOException) when (connectionAttempt < this.options.ConnectionRetryCount)
+                {
+                    connectionAttempt++;
+                    this.DisposeConnection();
+                    await Task.Delay(this.options.ConnectionRetryDelay, cancellationToken);
+                }
+            }
         }
         catch (SocketException)
         {

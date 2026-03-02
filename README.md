@@ -144,3 +144,59 @@ The smoke-test client also reports expanded `Health` and `Metrics` output, inclu
 When cluster bootstrap is enabled, `Health` and `Metrics` also expose cluster runtime status (`cluster.enabled`, `cluster.running`, `cluster.members.count`).
 
 Integration test coverage includes TCP end-to-end command flow, TCP auth failure paths, and storage recovery across process restarts.
+
+## CatalogClient (phase 2) ##
+
+A typed .NET client library is available in `src/WebNet.CatalogClient`.
+
+- Target framework: `net10.0`
+- Protocol: TCP + length-prefixed MessagePack frames
+- Auth model: caller-provided delegate supplies token/thumbprint/subject/roles per request
+
+Example:
+
+```csharp
+using System.Net;
+using WebNet.CatalogClient;
+
+var options = new CatalogClientOptions
+{
+  Address = IPAddress.Loopback,
+  Port = 7070,
+  MaxFrameBytes = 4 * 1024 * 1024,
+  ConnectTimeout = TimeSpan.FromSeconds(10),
+  ReadTimeout = TimeSpan.FromSeconds(30),
+  ConnectionRetryCount = 2,
+  ConnectionRetryDelay = TimeSpan.FromMilliseconds(200),
+  RateLimitRetryCount = 2,
+  RateLimitRetryDelay = TimeSpan.FromMilliseconds(250)
+};
+
+await using var client = new CatalogClient(
+  options,
+  _ => ValueTask.FromResult(new CatalogClientAuthContext(
+    Token: "dev-token",
+    ClientCertificateThumbprint: "dev-thumbprint",
+    Subject: "dev-user",
+    Roles: ["admin"])));
+
+var database = await client.CreateDatabaseAsync(new CreateDatabaseRequest("default", ConsistencyLevel.Strong, MakePrimary: true));
+var catalog = await client.CreateCatalogAsync(new CreateCatalogRequest("default", "products"));
+
+var put = await client.PutDocumentAsync(new PutDocumentRequest(
+  "default",
+  "products",
+  new Document
+  {
+    Properties = { ["sku"] = "SKU-100", ["name"] = "Product 100" }
+  }));
+
+var get = await client.GetDocumentAsync(new GetDocumentRequest("default", "products", put.DocumentId));
+var health = await client.HealthAsync();
+```
+
+Error handling notes:
+
+- Business/authorization failures are surfaced as `CatalogClientException` with server `ErrorCode` values (for example `auth.forbidden`).
+- `transport.rate_limited` responses are retried up to `RateLimitRetryCount` with `RateLimitRetryDelay` between attempts.
+- Socket/stream failures are retried up to `ConnectionRetryCount` with `ConnectionRetryDelay`, reconnecting automatically.
